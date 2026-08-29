@@ -1,10 +1,18 @@
 import { createState, resetLevel, step, type GameState } from "./core/state";
 import { seasonAt } from "./core/level";
 import { createAudio } from "./audio";
-import { listenKeyboard } from "./input";
+import { listenControls } from "./input";
 import { LEVEL_1 } from "./levels";
 import { PAR_GHOST, PAR_SCORE } from "./ghost";
-import { VIEW_H, VIEW_W, buildScenery, createRenderer, drawPause, render } from "./render/draw";
+import {
+  PAUSE_MENU,
+  VIEW_H,
+  VIEW_W,
+  buildScenery,
+  createRenderer,
+  drawPause,
+  render,
+} from "./render/draw";
 
 /** Simulation rate. Fixed so physics is identical on 60Hz and 120Hz displays. */
 const STEP = 1 / 120;
@@ -15,7 +23,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game");
 if (!canvas) throw new Error("missing #game canvas");
 
 const renderer = createRenderer(canvas);
-const keyboard = listenKeyboard(window);
+const controls = listenControls(window);
 const audio = createAudio();
 
 function newGame(): GameState {
@@ -80,6 +88,8 @@ let grown = Number(readStored(GROWN_KEY)) || 0;
 /** The bar this run has to clear; frozen at the start so the banner is honest. */
 let target = best;
 let paused = false;
+/** Which pause entry is highlighted; always back to the top on a fresh pause. */
+let pauseIndex = 0;
 /** One write per run, however many frames the ending sits on screen. */
 let recorded = false;
 let state = newGame();
@@ -107,9 +117,34 @@ function frame(now: number): void {
   accumulator += Math.min(seconds - previous, MAX_FRAME);
   previous = seconds;
 
-  if (keyboard.takePause()) paused = !paused;
+  controls.poll();
 
-  if (keyboard.takeRestart()) {
+  // Drained every frame so a menu never opens holding a stale press.
+  const menuMove = controls.takeMenu();
+  const menuConfirm = controls.takeConfirm();
+
+  if (controls.takePause()) {
+    paused = !paused;
+    pauseIndex = 0;
+  }
+
+  if (paused) {
+    if (menuMove !== 0) {
+      pauseIndex = (pauseIndex + menuMove + PAUSE_MENU.length) % PAUSE_MENU.length;
+    }
+    if (menuConfirm) {
+      if (PAUSE_MENU[pauseIndex] === "RESTART") {
+        state = newGame();
+        accumulator = 0;
+      }
+      paused = false;
+      // The key that confirmed is still down. Without this the cat reads it as
+      // a fresh jump on the very frame the game resumes.
+      state.player.jumpHeld = true;
+    }
+  }
+
+  if (controls.takeRestart()) {
     state = newGame();
     accumulator = 0;
     paused = false;
@@ -121,7 +156,7 @@ function frame(now: number): void {
 
   while (accumulator >= STEP) {
     if (!frozen) {
-      step(state, keyboard.input, STEP);
+      step(state, controls.input, STEP);
       for (const sound of state.sounds) audio.play(sound);
     }
     accumulator -= STEP;
@@ -134,7 +169,7 @@ function frame(now: number): void {
     best,
     beat: isBetter(state.score, target),
   });
-  if (paused) drawPause(renderer, best);
+  if (paused) drawPause(renderer, best, pauseIndex);
 
   if (over && !recorded) {
     recorded = true;

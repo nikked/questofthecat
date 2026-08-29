@@ -1,8 +1,9 @@
 import { bake, type Sprite } from "./sprites";
 
-export const GLYPH_W = 5;
-export const GLYPH_H = 5;
-export const GLYPH_ADVANCE = GLYPH_W + 1;
+/** Glyphs are authored 5x5 and doubled by the bake, like every other sprite. */
+export const GLYPH_W = 10;
+export const GLYPH_H = 10;
+export const GLYPH_ADVANCE = GLYPH_W + 2;
 
 /** Rows are slash-separated to keep the table to one line per glyph. */
 const GLYPHS: Readonly<Record<string, string>> = {
@@ -47,6 +48,7 @@ const GLYPHS: Readonly<Record<string, string>> = {
   "!": "..#../..#../..#../...../..#..",
   "-": "...../...../.###./...../.....",
   ".": "...../...../...../...../..#..",
+  "/": "....#/...#./..#../.#.../#....",
 };
 
 export type Font = ReadonlyMap<string, Sprite>;

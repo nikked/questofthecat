@@ -17,7 +17,7 @@ export type Sweep = {
 
 /**
  * Both sweeps assume |delta| < TILE, which the fixed timestep guarantees:
- * the fastest body moves under 2px per step.
+ * the fastest body moves 8px per step against a 32px tile.
  */
 export function sweepX(level: Level, r: Rect, dx: number): Sweep {
   const nx = r.x + dx;
@@ -86,20 +86,20 @@ export function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-export const MAX_FALL = 420;
-export const JUMP_SPEED = 320;
+export const MAX_FALL = 840;
+export const JUMP_SPEED = 640;
 /**
  * Holding jump buys a weaker gravity for as long as the cat is still rising, so
  * height tracks hold time continuously instead of snapping between two arcs.
  */
-export const JUMP_GRAVITY = 900;
-export const FALL_GRAVITY = 1900;
+export const JUMP_GRAVITY = 1800;
+export const FALL_GRAVITY = 3800;
 /** Applied once, on the frame the key comes up, to end the rise cleanly. */
 export const JUMP_CUT = 0.45;
-export const STOMP_BOUNCE = 300;
-export const WALK_SPEED = 95;
-export const RUN_SPEED = 165;
-export const AIR_ACCEL = 550;
+export const STOMP_BOUNCE = 600;
+export const WALK_SPEED = 190;
+export const RUN_SPEED = 330;
+export const AIR_ACCEL = 1100;
 
 /** What the ground under the cat does to its horizontal speed. */
 export type Surface = {
@@ -108,21 +108,21 @@ export type Surface = {
   readonly friction: number;
 };
 
-export const SOLID: Surface = { accel: 900, turn: 1700, friction: 1100 };
+export const SOLID: Surface = { accel: 1800, turn: 3400, friction: 2200 };
 /** Ice keeps almost all momentum, so stopping and turning take real planning. */
-export const ICE: Surface = { accel: 260, turn: 380, friction: 90 };
+export const ICE: Surface = { accel: 520, turn: 760, friction: 180 };
 export const COYOTE_TIME = 0.09;
 export const JUMP_BUFFER = 0.13;
 
 /** Terminal speed while sliding down a wall, well under a free fall. */
-export const WALL_SLIDE_SPEED = 52;
+export const WALL_SLIDE_SPEED = 104;
 /**
  * How far from a wall the claws still catch. Requiring pixel contact made the
  * move feel broken; a few pixels of reach makes it feel like a cat.
  */
-export const WALL_REACH = 5;
-export const WALL_JUMP_Y = 330;
-export const WALL_JUMP_X = 155;
+export const WALL_REACH = 10;
+export const WALL_JUMP_Y = 660;
+export const WALL_JUMP_X = 310;
 /** Grace after sliding off the end of a wall, mirroring ground coyote time. */
 export const WALL_COYOTE = 0.15;
 /**
@@ -131,14 +131,50 @@ export const WALL_COYOTE = 0.15;
  */
 export const WALL_LOCK = 0.12;
 
+/**
+ * The three Crash verbs. Each is a fixed-length action rather than a held
+ * state, so nothing can get stuck in a pose and every one of them is a pure
+ * function of a timer.
+ */
+export const SPIN_TIME = 0.4;
+export const SPIN_COOLDOWN = 0.25;
+/** A spin can be abandoned into a jump after this, so it never feels committal. */
+export const SPIN_CANCEL = 0.15;
+/** How far past the cat's own body the tail reaches, each side. */
+export const SPIN_REACH = 28;
+
+export const SLIDE_TIME = 0.45;
+export const SLIDE_SPEED = 380;
+/** Crouched height. Low enough to pass under a one-tile gap. */
+export const SLIDE_H = 16;
+/** Below this there is no momentum to slide on and the input is ignored. */
+export const SLIDE_MIN_SPEED = 200;
+/** Jumping out of a slide trades height for reach. */
+export const SLIDE_JUMP_X = 1.35;
+export const SLIDE_JUMP_Y = 0.82;
+
+/** A slam overrides gravity outright: it is a commitment, not a fast fall. */
+export const SLAM_SPEED = 900;
+export const SLAM_RECOVER = 0.3;
+
 export type Input = {
   readonly left: boolean;
   readonly right: boolean;
   readonly jump: boolean;
   readonly run: boolean;
+  /** Slide when it arrives on the ground at speed, body slam when in the air. */
+  readonly down: boolean;
+  readonly spin: boolean;
 };
 
-export const NO_INPUT: Input = { left: false, right: false, jump: false, run: false };
+export const NO_INPUT: Input = {
+  left: false,
+  right: false,
+  jump: false,
+  run: false,
+  down: false,
+  spin: false,
+};
 
 /**
  * Target-speed model: pick the speed the input asks for, then move toward it.

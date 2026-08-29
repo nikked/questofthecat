@@ -1,14 +1,39 @@
-export const TILE = 16;
+export const TILE = 32;
 
 export const enum Tile {
   Empty = 0,
   Ground = 1,
   Brick = 2,
-  Box = 3,
-  Sand = 4,
+  Sand = 3,
+  /** Crates are tiles: they are grid-aligned, static, and already collide. */
+  CratePlain = 4,
+  CrateTnt = 5,
+  CrateNitro = 6,
+  CrateBounce = 7,
+  CrateCheck = 8,
 }
 
-export type SpawnKind = "player" | "dog" | "flower" | "goal" | "checkpoint" | "cactus" | "monstera" | "retriever";
+/** Everything a verb can act on, and the only tiles the crate counter sees. */
+export function isCrate(tile: Tile): boolean {
+  return tile >= Tile.CratePlain && tile <= Tile.CrateCheck;
+}
+
+/** Nitro is the exception: it is never broken by a verb, only by a blast. */
+export function breakableByVerb(tile: Tile): boolean {
+  return isCrate(tile) && tile !== Tile.CrateNitro;
+}
+
+export type SpawnKind =
+  | "player"
+  | "dog"
+  | "retriever"
+  | "hedgehog"
+  | "wasp"
+  | "flower"
+  | "goal"
+  | "cactus"
+  | "monstera"
+  | "boss";
 
 export type Season = "spring" | "summer" | "autumn" | "winter" | "sakura";
 
@@ -56,19 +81,25 @@ export type Level = {
 const TILE_CHARS: Readonly<Record<string, Tile>> = {
   "#": Tile.Ground,
   b: Tile.Brick,
-  "?": Tile.Box,
   "=": Tile.Sand,
+  c: Tile.CratePlain,
+  t: Tile.CrateTnt,
+  n: Tile.CrateNitro,
+  "^": Tile.CrateBounce,
+  p: Tile.CrateCheck,
 };
 
 const SPAWN_CHARS: Readonly<Record<string, SpawnKind>> = {
   C: "player",
   d: "dog",
   D: "retriever",
+  h: "hedgehog",
+  w: "wasp",
   f: "flower",
   G: "goal",
-  P: "checkpoint",
   x: "cactus",
   M: "monstera",
+  B: "boss",
 };
 
 /**

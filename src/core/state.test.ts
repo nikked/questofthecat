@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { TILE, Tile, tileAt } from "./level";
-import { JUMP_BUFFER, NO_INPUT, WALL_SLIDE_SPEED, type Input } from "./physics";
+import {
+  JUMP_BUFFER,
+  NO_INPUT,
+  RUN_SPEED,
+  SLIDE_H,
+  SPIN_CANCEL,
+  SPIN_TIME,
+  WALL_SLIDE_SPEED,
+  type Input,
+} from "./physics";
 import {
   BREEDS,
   dogRect,
@@ -8,18 +17,24 @@ import {
   GOAL_POINTS,
   MONSTERA_POINTS,
   STOMP_POINTS,
-  STUMP_POINTS,
+  CRATE_FLOWERS,
+  CRATE_POINTS,
   TIME_BONUS_RATE,
   TIME_BONUS_WINDOW,
   timeBonus,
   MONSTERA_VALUE,
-  SAILBOAT_THRESHOLD,
-  SAIL_THRESHOLD,
-  SHIP_THRESHOLD,
+  SAILBOAT_PERCENT,
+  RAFT_PERCENT,
+  SHIP_PERCENT,
+  PLAYER_H,
   STARTING_LIVES,
   TRACE_HZ,
+  BOUNCE_LIMIT,
+  TNT_FUSE,
   createState,
+  cratePercent,
   endingFor,
+  playerRect,
   harvest,
   resetLevel,
   step,
@@ -54,7 +69,7 @@ describe("gravity and landing", () => {
     const state = start(["  ", "C ", "##"]);
     run(state, 1);
 
-    expect(state.player.y).toBe(2 * TILE - 14);
+    expect(state.player.y).toBe(2 * TILE - PLAYER_H);
     expect(state.player.grounded).toBe(true);
     expect(state.player.vy).toBe(0);
   });
@@ -283,7 +298,9 @@ describe("dog breeds and behaviour", () => {
   });
 
   it("stops moving while it scratches or sniffs", () => {
-    const state = start(["          ", "          ", "C       d ", "##########"]);
+    // Walled off from the cat: a dog that reaches it triggers a respawn, and
+    // respawn replaces the dogs, so this reference would go stale mid-test.
+    const state = start(["          ", "          ", "C   #   d ", "##########"]);
     const dog = state.dogs[0]!;
 
     let sawIdle = false;
@@ -302,7 +319,7 @@ describe("dog breeds and behaviour", () => {
   });
 
   it("always goes back to walking", () => {
-    const state = start(["          ", "          ", "C       d ", "##########"]);
+    const state = start(["          ", "          ", "C   #   d ", "##########"]);
     const dog = state.dogs[0]!;
     const seen = new Set<string>();
     for (let t = 0; t < 40; t += DT) {
@@ -380,7 +397,7 @@ describe("contacts", () => {
   it("extends the flagpole from its marker down to the floor", () => {
     const state = start(["  G", "   ", "   ", "C  ", "###"]);
 
-    expect(state.goal).toEqual({ x: 2 * TILE + 4, y: 0, w: 8, h: 4 * TILE });
+    expect(state.goal).toEqual({ x: 2 * TILE + 8, y: 0, w: 16, h: 4 * TILE });
   });
 
   it("wins by touching the bottom of the pole", () => {
@@ -415,27 +432,37 @@ describe("seasons", () => {
   });
 });
 
-describe("checkpoints", () => {
-  it("moves the respawn point and chimes once", () => {
-    const state = start(["      ", "    P ", "C     ", "######"]);
+describe("checkpoint crates", () => {
+  it("moves the respawn point and chimes once, when broken", () => {
+    const state = start(["      ", "      ", "C p   ", "######"]);
     run(state, 0.4);
 
     const emitted: string[] = [];
     for (let t = 0; t < 1.2; t += DT) {
-      step(state, press({ right: true, run: true }), DT);
+      step(state, press({ right: true, run: true, spin: t > 0.5 }), DT);
       emitted.push(...state.sounds);
     }
 
     expect(emitted.filter((e) => e === "checkpoint")).toEqual(["checkpoint"]);
-    expect(state.spawnX).toBe(4 * TILE);
+    expect(state.spawnX).toBe(2 * TILE);
   });
 
-  it("respawns the cat at the checkpoint after a death", () => {
-    const state = start(["          ", "    P     ", "C        d", "##########"]);
-    run(state, 0.4);
+  it("does nothing at all until it is broken", () => {
+    const state = start(["      ", "      ", "C p   ", "######"]);
+    run(state, 1.2, press({ right: true, run: true }));
 
-    expect(runUntilRespawn(state, press({ right: true, run: true }))).toBe(true);
-    expect(state.player.x).toBe(4 * TILE);
+    expect(state.spawnX).toBe(0);
+  });
+
+  it("respawns the cat where the crate stood", () => {
+    const state = start(["          ", "          ", "C p      d", "##########"]);
+    run(state, 0.4);
+    for (let t = 0; t < 1.2; t += DT) {
+      step(state, press({ right: true, run: true, spin: t > 0.5 }), DT);
+    }
+
+    expect(runUntilRespawn(state, press({ right: true, run: true }), 6)).toBe(true);
+    expect(state.player.x).toBe(2 * TILE);
   });
 });
 
@@ -468,15 +495,18 @@ describe("cacti", () => {
 });
 
 describe("scoring", () => {
-  it("pays for a flower, a monstera and a stump", () => {
+  it("pays for a flower, a monstera and a crate", () => {
     const state = start(["      ", "      ", "CfM   ", "######"]);
     run(state, 0.6, press({ right: true }));
     expect(state.score).toBe(FLOWER_POINTS + MONSTERA_POINTS);
 
-    const bumped = start([" ? ", " C ", "###"]);
-    run(bumped, 0.4);
-    run(bumped, 0.4, press({ jump: true }));
-    expect(bumped.score).toBe(STUMP_POINTS);
+    const smashed = start(["      ", "      ", "C c   ", "######"]);
+    run(smashed, 0.4);
+    for (let t = 0; t < 1.2; t += DT) {
+      step(smashed, press({ right: true, run: true, spin: t > 0.5 }), DT);
+    }
+    // A plain crate pays for itself and for the flowers inside it.
+    expect(smashed.score).toBe(CRATE_POINTS + CRATE_FLOWERS * FLOWER_POINTS);
   });
 
   it("pays for a stomp", () => {
@@ -545,7 +575,7 @@ describe("the run clock", () => {
 });
 
 describe("lives", () => {
-  it("counts down but never ends the run", () => {
+  it("restarts the level when the counter empties, and refills it", () => {
     const state = start(["      ", "      ", "C    d", "######"]);
 
     for (let i = 0; i < 12; i++) {
@@ -553,9 +583,10 @@ describe("lives", () => {
     }
 
     expect(state.deaths).toBeGreaterThan(STARTING_LIVES);
-    expect(state.lives).toBe(0);
+    // Running out costs the level, not the run: the counter comes back full.
+    expect(state.lives).toBeGreaterThan(0);
+    expect(state.lives).toBeLessThanOrEqual(STARTING_LIVES);
     expect(state.phase).not.toBe("won");
-    // Still playable with the counter emptied.
     expect(["playing", "dying"]).toContain(state.phase);
   });
 });
@@ -589,13 +620,13 @@ describe("what the cat carries", () => {
     expect(harvest(state)).toBe(1 + MONSTERA_VALUE);
   });
 
-  it("grades the ending by what was carried, not by time", () => {
+  it("grades the ending by the share of crates broken", () => {
     expect(endingFor(0)).toBe("shore");
-    expect(endingFor(SAIL_THRESHOLD - 1)).toBe("shore");
-    expect(endingFor(SAIL_THRESHOLD)).toBe("raft");
-    expect(endingFor(SAILBOAT_THRESHOLD)).toBe("sailboat");
-    expect(endingFor(SHIP_THRESHOLD)).toBe("ship");
-    expect(endingFor(999)).toBe("ship");
+    expect(endingFor(RAFT_PERCENT - 1)).toBe("shore");
+    expect(endingFor(RAFT_PERCENT)).toBe("raft");
+    expect(endingFor(SAILBOAT_PERCENT)).toBe("sailboat");
+    expect(endingFor(SHIP_PERCENT)).toBe("ship");
+    expect(endingFor(100)).toBe("ship");
   });
 
   it("keeps monstera through a death, like flowers", () => {
@@ -634,7 +665,7 @@ describe("the avalanche", () => {
     "#..#..",
     "#..#..",
     "#..#..",
-    "#..#..",
+    "#.....",
     "#...C.",
     "######",
   ];
@@ -736,12 +767,324 @@ describe("sound events", () => {
 });
 
 describe("head bumps", () => {
-  it("pops the stump and leaves it a plain log", () => {
-    const state = start([" ? ", " C ", "###"]);
+  it("breaks a crate jumped into from beneath", () => {
+    const state = start(["    ", " c  ", "    ", " C  ", "####"]);
     run(state, 0.4);
-    expect(tileAt(state.level, 1, 0)).toBe(Tile.Box);
+    expect(tileAt(state.level, 1, 1)).toBe(Tile.CratePlain);
 
-    run(state, 0.4, press({ jump: true }));
-    expect(tileAt(state.level, 1, 0)).toBe(Tile.Brick);
+    run(state, 0.5, press({ jump: true }));
+    expect(tileAt(state.level, 1, 1)).toBe(Tile.Empty);
+    expect(state.cratesBroken).toBe(1);
+  });
+});
+
+describe("the spin", () => {
+  it("reaches a crate the cat is not touching", () => {
+    const state = start(["      ", "      ", "Cc    ", "######"]);
+    run(state, 0.4);
+    expect(tileAt(state.level, 1, 2)).toBe(Tile.CratePlain);
+
+    run(state, 0.2, press({ spin: true }));
+    expect(tileAt(state.level, 1, 2)).toBe(Tile.Empty);
+  });
+
+  it("runs for a fixed time and then has to cool down", () => {
+    const state = start(["      ", "      ", "C     ", "######"]);
+    run(state, 0.4);
+
+    step(state, press({ spin: true }), DT);
+    expect(state.player.action).toBe("spin");
+
+    run(state, SPIN_TIME, press({ spin: true }));
+    expect(state.player.action).toBe("none");
+    expect(state.player.spinCooldown).toBeGreaterThan(0);
+  });
+
+  it("can be abandoned into a jump once the cancel window opens", () => {
+    const state = start(["      ", "      ", "C     ", "######"]);
+    run(state, 0.4);
+
+    step(state, press({ spin: true }), DT);
+    run(state, SPIN_CANCEL + 0.02, press({ spin: true }));
+    expect(state.player.action).toBe("spin");
+
+    run(state, 0.05, press({ spin: true, jump: true }));
+    expect(state.player.action).toBe("none");
+    expect(state.player.vy).toBeLessThan(0);
+  });
+});
+
+describe("the slide", () => {
+  const tunnel = [
+    "            ",
+    "      ###   ",
+    "C           ",
+    "############",
+  ];
+
+  it("is ignored without the momentum to carry it", () => {
+    const state = start(["      ", "      ", "C     ", "######"]);
+    run(state, 0.4);
+
+    step(state, press({ down: true }), DT);
+    expect(state.player.action).toBe("none");
+  });
+
+  it("drops the hitbox to half height", () => {
+    const state = start(["            ", "            ", "C           ", "############"]);
+    run(state, 0.5, press({ right: true, run: true }));
+
+    step(state, press({ right: true, run: true, down: true }), DT);
+    expect(state.player.action).toBe("slide");
+    expect(playerRect(state.player).h).toBe(SLIDE_H);
+  });
+
+  it("passes under a roof that stops a standing cat", () => {
+    const blocked = start(tunnel);
+    run(blocked, 2, press({ right: true, run: true }));
+    expect(blocked.player.x).toBeLessThan(6 * TILE);
+
+    const slid = start(tunnel);
+    run(slid, 0.4, press({ right: true, run: true }));
+    run(slid, 2, press({ right: true, run: true, down: true }));
+    expect(slid.player.x).toBeGreaterThan(9 * TILE);
+  });
+
+  it("launches faster than a run can", () => {
+    const state = start(["            ", "            ", "C           ", "############"]);
+    run(state, 0.5, press({ right: true, run: true }));
+    step(state, press({ right: true, run: true, down: true }), DT);
+    run(state, 0.05, press({ right: true, run: true, jump: true }));
+
+    expect(state.player.vx).toBeGreaterThan(RUN_SPEED);
+  });
+});
+
+describe("the body slam", () => {
+  it("breaks the crate it lands on", () => {
+    const state = start(["    ", " C  ", "    ", " c  ", "####"]);
+    run(state, 0.02);
+    run(state, 0.6, press({ down: true }));
+
+    expect(tileAt(state.level, 1, 3)).toBe(Tile.Empty);
+    expect(state.cratesBroken).toBe(1);
+  });
+
+  it("falls faster than gravity alone", () => {
+    const plain = start(["    ", " C  ", "    ", "    ", "####"]);
+    const slammed = start(["    ", " C  ", "    ", "    ", "####"]);
+    run(plain, 0.02);
+    run(slammed, 0.02);
+
+    run(plain, 0.1);
+    run(slammed, 0.1, press({ down: true }));
+    expect(slammed.player.y).toBeGreaterThan(plain.player.y);
+  });
+});
+
+describe("crates", () => {
+  it("counts every crate in the level once", () => {
+    const state = start(["      ", "      ", "Cctn^p", "######"]);
+    expect(state.crateTotal).toBe(5);
+    expect(cratePercent(state)).toBe(0);
+  });
+
+  it("lights a TNT that is landed on, and takes its neighbours with it", () => {
+    const state = start(["      ", " C    ", "      ", "ctc   ", "######"]);
+    run(state, 0.6);
+
+    const lit = state.crates.get(3 * state.level.width + 1);
+    expect(lit?.fuse).toBeGreaterThan(0);
+
+    run(state, TNT_FUSE + 0.3);
+    expect(tileAt(state.level, 0, 3)).toBe(Tile.Empty);
+    expect(tileAt(state.level, 1, 3)).toBe(Tile.Empty);
+    expect(tileAt(state.level, 2, 3)).toBe(Tile.Empty);
+  });
+
+  it("kills on any contact with nitro", () => {
+    const state = start(["      ", "      ", "C n   ", "######"]);
+    run(state, 0.4);
+
+    expect(runUntilRespawn(state, press({ right: true, run: true }))).toBe(true);
+  });
+
+  it("clears nitro only by blast, never by a verb", () => {
+    const spun = start(["      ", "      ", "Cn    ", "######"]);
+    run(spun, 0.4);
+    run(spun, 0.3, press({ spin: true }));
+    expect(tileAt(spun.level, 1, 2)).toBe(Tile.CrateNitro);
+
+    const blown = start(["      ", " C    ", "      ", " tn   ", "######"]);
+    run(blown, 0.6);
+    run(blown, TNT_FUSE + 0.3);
+    expect(tileAt(blown.level, 2, 3)).toBe(Tile.Empty);
+  });
+
+  it("bounces higher each time and breaks on the last", () => {
+    const state = start(["    ", " C  ", "    ", " ^  ", "####"]);
+    const launches: number[] = [];
+    for (let t = 0; t < 8; t += DT) {
+      step(state, NO_INPUT, DT);
+      if (state.sounds.includes("bounce")) launches.push(-state.player.vy);
+    }
+
+    expect(launches.length).toBe(BOUNCE_LIMIT);
+    expect(launches[1]!).toBeGreaterThan(launches[0]!);
+    expect(tileAt(state.level, 1, 3)).toBe(Tile.Empty);
+  });
+
+  it("pays a life for every hundredth flower", () => {
+    const state = start(["      ", "      ", "Cffff ", "######"]);
+    state.flowerCount = 99;
+    const before = state.lives;
+    run(state, 1, press({ right: true, run: true }));
+
+    expect(state.lives).toBe(before + 1);
+  });
+});
+
+describe("what answers which enemy", () => {
+  /** Parks the animal so the test is about the verb, not about its patrol. */
+  function still(state: GameState): void {
+    const d = state.dogs[0]!;
+    d.vx = 0;
+    d.action = "sniff";
+    d.actionTime = 99;
+  }
+
+  const spinCases = [
+    ["d", "terrier", true],
+    ["D", "retriever", true],
+    ["h", "hedgehog", false],
+    ["w", "wasp", true],
+  ] as const;
+
+  for (const [ch, name, dies] of spinCases) {
+    it(`${name}: a spin ${dies ? "kills it" : "does nothing"}`, () => {
+      const state = start(["      ", "      ", `C${ch}    `, "######"]);
+      still(state);
+      run(state, 0.3);
+      run(state, 0.3, press({ spin: true }));
+
+      expect(state.dogs[0]!.alive).toBe(!dies);
+    });
+  }
+
+  it("terrier: a stomp kills it", () => {
+    const state = start(["  ", "C ", "  ", "d ", "##"]);
+    state.dogs[0]!.vx = 0;
+    run(state, 1);
+
+    expect(state.dogs[0]!.alive).toBe(false);
+    expect(state.phase).toBe("playing");
+  });
+
+  it("retriever: a stomp hurts the cat instead", () => {
+    const state = start(["  ", "C ", "  ", "D ", "##"]);
+    state.dogs[0]!.vx = 0;
+    run(state, 1);
+
+    expect(state.dogs[0]!.alive).toBe(true);
+    expect(state.deaths).toBeGreaterThan(0);
+  });
+
+  it("hedgehog: a slide passes under it, a run into it does not", () => {
+    const rows = ["            ", "            ", "C     h     ", "############"];
+    const walked = start(rows);
+    still(walked);
+    run(walked, 0.4);
+    expect(runUntilRespawn(walked, press({ right: true, run: true }), 2)).toBe(true);
+
+    const slid = start(rows);
+    still(slid);
+    run(slid, 0.4, press({ right: true, run: true }));
+    run(slid, 0.5, press({ right: true, run: true, down: true }));
+    expect(slid.deaths).toBe(0);
+    expect(slid.player.x).toBeGreaterThan(7 * TILE);
+  });
+});
+
+describe("the big dog", () => {
+  it("winds up, charges, and stuns itself on what it hits", () => {
+    // Walled off from the cat: a charge that reaches it kills it, and respawn
+    // rebuilds the boss, so the cycle would restart before it ever stunned.
+    const state = start(["          ", "          ", "C#       B", "##########"]);
+    const seen = new Set<string>();
+    for (let t = 0; t < 8; t += DT) {
+      step(state, NO_INPUT, DT);
+      seen.add(state.boss!.mode);
+    }
+
+    expect(seen.has("charge")).toBe(true);
+    expect(seen.has("stunned")).toBe(true);
+  });
+
+  it("only takes a hit while it is stunned", () => {
+    const ready = start(["          ", "          ", "CB        ", "##########"]);
+    ready.boss!.mode = "stunned";
+    ready.boss!.modeTime = 99;
+    run(ready, 0.3);
+    run(ready, 0.3, press({ spin: true }));
+    expect(ready.boss!.phase).toBe(1);
+    expect(ready.boss!.mode).toBe("hurt");
+
+    const guarded = start(["          ", "          ", "CB        ", "##########"]);
+    guarded.boss!.mode = "wait";
+    guarded.boss!.modeTime = 99;
+    run(guarded, 0.3);
+    run(guarded, 0.3, press({ spin: true }));
+    expect(guarded.boss!.phase).toBe(0);
+  });
+
+  it("is harmless while it reels, so landing the spin is not a death", () => {
+    const state = start(["          ", "          ", "CB        ", "##########"]);
+    state.boss!.mode = "hurt";
+    state.boss!.modeTime = 99;
+    state.player.x = state.boss!.x;
+    run(state, 0.4);
+
+    expect(state.deaths).toBe(0);
+  });
+
+  it("keeps the flag shut until it is down", () => {
+    const state = start(["        ", "        ", "C  B   G", "########"]);
+    run(state, 0.3);
+    state.player.x = 7 * TILE;
+    run(state, 0.1);
+    expect(state.phase).toBe("playing");
+
+    state.boss!.mode = "dead";
+    run(state, 0.1);
+    expect(state.phase).toBe("won");
+  });
+});
+
+describe("a slide that runs into something", () => {
+  it("breaks a crate it hits head on", () => {
+    const state = start(["            ", "            ", "C     c     ", "############"]);
+    run(state, 0.4, press({ right: true, run: true }));
+    run(state, 0.6, press({ right: true, run: true, down: true }));
+
+    expect(tileAt(state.level, 6, 2)).toBe(Tile.Empty);
+  });
+
+  it("can be backed out of when it jams under a roof it cannot stand under", () => {
+    const state = start([
+      "            ",
+      "     ####   ",
+      "C        #  ",
+      "############",
+    ]);
+    run(state, 0.4, press({ right: true, run: true }));
+    run(state, 1.2, press({ right: true, run: true, down: true }));
+
+    // Wedged: under the roof, nose against the wall, unable to stand up.
+    const jammed = state.player.x;
+    expect(state.player.action).toBe("slide");
+
+    // Holding back has to get the cat out. Anything else is a softlock.
+    run(state, 0.8, press({ left: true, run: true }));
+    expect(state.player.x).toBeLessThan(jammed - TILE);
   });
 });

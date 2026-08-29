@@ -18,28 +18,10 @@
         image-rendering: pixelated;
         display: block;
       }
-      #hint {
-        position: fixed;
-        bottom: 10px;
-        margin: 0;
-        text-align: center;
-        line-height: 1.7;
-        color: #6f6255;
-        font: 12px ui-monospace, monospace;
-        letter-spacing: 0.08em;
-      }
-      #hint strong {
-        color: #a89078;
-        font-weight: 400;
-      }
     </style>
   </head>
   <body>
     <canvas id="game"></canvas>
-    <p id="hint">
-      ARROWS / WASD move &middot; SPACE jump &middot; SHIFT run &middot; ESC pause &middot; R restart<br />
-      <strong>In mid-air, hold toward a wall to cling &mdash; then SPACE to kick off it.</strong>
-    </p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

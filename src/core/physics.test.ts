@@ -29,7 +29,7 @@ describe("sweepX", () => {
 
   it("snaps the right edge flush against a wall", () => {
     const r = { x: TILE, y: TILE, w: 8, h: 8 };
-    expect(sweepX(level, r, 12)).toEqual({ value: 2 * TILE - 8, hit: true });
+    expect(sweepX(level, r, 28)).toEqual({ value: 2 * TILE - 8, hit: true });
   });
 
   it("snaps the left edge flush against a wall", () => {
@@ -46,7 +46,7 @@ describe("sweepX", () => {
 describe("sweepY", () => {
   it("lands the bottom edge exactly on the ground", () => {
     const r = { x: 0, y: 0, w: 8, h: 8 };
-    expect(sweepY(level, r, 40)).toEqual({ value: 2 * TILE - 8, hit: true });
+    expect(sweepY(level, r, 80)).toEqual({ value: 2 * TILE - 8, hit: true });
   });
 
   it("stops the top edge under a ceiling", () => {

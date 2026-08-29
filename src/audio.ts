@@ -65,6 +65,26 @@ const BLIPS: Readonly<Record<string, readonly Note[]>> = {
     { freq: 1568, start: 0.18, length: 0.28 },
   ],
   land: [{ freq: 150, bend: 70, start: 0, length: 0.07, wave: "triangle", gain: 0.5 }],
+  // Wood giving way: a short knock with a splintery tail above it.
+  crate: [
+    { freq: 210, bend: 90, start: 0, length: 0.08, wave: "square", gain: 0.55 },
+    { freq: 620, bend: 340, start: 0.02, length: 0.09, wave: "triangle", gain: 0.3 },
+  ],
+  bounce: [{ freq: 300, bend: 900, start: 0, length: 0.14, wave: "sine", gain: 0.6 }],
+  // A rising two-tone, so an armed TNT is heard even off screen.
+  fuse: [
+    { freq: 880, start: 0, length: 0.06 },
+    { freq: 1175, start: 0.07, length: 0.1 },
+  ],
+  life: [
+    { freq: 659, start: 0, length: 0.08 },
+    { freq: 988, start: 0.08, length: 0.08 },
+    { freq: 1319, start: 0.16, length: 0.24 },
+  ],
+  bossHurt: [
+    { freq: 160, bend: 60, start: 0, length: 0.22, wave: "sawtooth", gain: 0.7 },
+    { freq: 420, bend: 130, start: 0.04, length: 0.2, wave: "square", gain: 0.4 },
+  ],
 };
 
 /** Claws on stone: filtered noise, not a tone. */
@@ -78,6 +98,11 @@ type Scrape = {
 
 const SCRAPES: Readonly<Record<string, Scrape>> = {
   grip: { from: 2600, to: 1100, q: 3.5, length: 0.14, gain: 0.5 },
+  // The three verbs are all air and grit, so they are all filtered noise.
+  spin: { from: 900, to: 2800, q: 2.2, length: 0.22, gain: 0.42 },
+  slide: { from: 1800, to: 500, q: 1.8, length: 0.3, gain: 0.38 },
+  slam: { from: 500, to: 120, q: 1.2, length: 0.18, gain: 0.7 },
+  explode: { from: 1400, to: 60, q: 0.9, length: 0.45, gain: 0.95 },
 };
 
 const PEAK = 0.22;

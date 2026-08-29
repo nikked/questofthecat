@@ -4,6 +4,7 @@ import {
   pixelHeight,
   pixelWidth,
   seasonAt,
+  solidAt,
   tileAt,
   type Level,
   type Season,
@@ -12,8 +13,12 @@ import {
   TRACE_HZ,
   MONSTERA_H,
   MONSTERA_W,
+  BOSS_H,
+  BOSS_W,
+  DEBRIS_TIME,
+  cratePercent,
   endingFor,
-  harvest,
+  playerHeight,
   timeBonus,
   CACTUS_H,
   CACTUS_W,
@@ -30,8 +35,17 @@ import * as art from "./art";
 import { bakeFont, drawText, textWidth, type Font } from "./font";
 import { bake, flip, type Sprite } from "./sprites";
 
-export const VIEW_W = 320;
-export const VIEW_H = 180;
+export const VIEW_W = 640;
+export const VIEW_H = 360;
+
+/**
+ * The scenery behind the play plane is drawn at half resolution and scaled up.
+ * It is distant and hazed, so the softer pixels read as depth rather than as a
+ * lower budget, and every hand-tuned constant in it keeps its original units.
+ */
+const BG_SCALE = 2;
+const BG_W = VIEW_W / BG_SCALE;
+const BG_H = VIEW_H / BG_SCALE;
 
 type RGB = readonly [number, number, number];
 
@@ -108,7 +122,17 @@ const CLOUDS: readonly (readonly [number, number])[] = [
 
 export type Renderer = {
   readonly ctx: CanvasRenderingContext2D;
-  readonly cat: { idle: Sprite[]; run: Sprite[]; jump: Sprite[]; cling: Sprite[] };
+  readonly cat: {
+    idle: Sprite[];
+    run: Sprite[];
+    jump: Sprite[];
+    cling: Sprite[];
+    spin: Sprite[];
+    slide: Sprite[];
+    slam: Sprite[];
+  };
+  readonly boss: Sprite[];
+  readonly vignette: CanvasGradient;
   readonly dog: Readonly<Record<Breed, { walk: Sprite[]; scratch: Sprite[] }>>;
   readonly dogSquashed: Sprite;
   readonly flower: Sprite;
@@ -128,6 +152,7 @@ export type Renderer = {
   readonly post: { readonly idle: Sprite; readonly taken: Sprite };
   readonly fontLight: Font;
   readonly fontDark: Font;
+  readonly fontDim: Font;
 };
 
 /** Ground dressing: flowers and tufts that exist only in the renderer. */
@@ -192,7 +217,7 @@ function buildDecorations(level: Level, grown: number): readonly Decoration[] {
         const density = Math.min(0.52 + grown * 0.004, 0.86);
         if (roll > (season === "sakura" ? density + 0.26 : density)) continue;
         out.push({
-          x: tx * TILE + slot * 5 + Math.floor(hash(tx + slot * 17) * 3),
+          x: tx * TILE + slot * 10 + Math.floor(hash(tx + slot * 17) * 6),
           y: ty * TILE,
           season,
           variant: Math.floor(hash(tx * 3 + slot) * 3) % 3,
@@ -206,7 +231,7 @@ function buildDecorations(level: Level, grown: number): readonly Decoration[] {
         surfaces.push({ x: tx * TILE, y: ty * TILE, season, variant: 0, tree: false, leaf: true });
       }
       if (season === "sakura" && tx % 7 === 3) {
-        out.push({ x: tx * TILE - 8, y: ty * TILE, season, variant: 0, tree: true, leaf: false });
+        out.push({ x: tx * TILE - 16, y: ty * TILE, season, variant: 0, tree: true, leaf: false });
       }
       break;
     }
@@ -214,7 +239,7 @@ function buildDecorations(level: Level, grown: number): readonly Decoration[] {
 
   for (let i = 0; i < Math.min(grown, 60) && surfaces.length > 0; i++) {
     const spot = surfaces[Math.floor(hash(i * 53 + 11) * surfaces.length)];
-    if (spot) out.push({ ...spot, x: spot.x + Math.floor(hash(i * 31) * 8) - 4 });
+    if (spot) out.push({ ...spot, x: spot.x + Math.floor(hash(i * 31) * 16) - 8 });
   }
   return out;
 }
@@ -242,6 +267,20 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const dogScratch = bake(art.DOG_SIT);
   const retriever = bake(art.RETRIEVER);
   const retrieverScratch = bake(art.RETRIEVER_SIT);
+  const hedgehog = bake(art.HEDGEHOG);
+  const wasp = bake(art.WASP);
+  const boss = bake(art.BOSS);
+  const spin = bake(art.CAT_SPIN);
+  const slide = bake(art.CAT_SLIDE);
+  const slam = bake(art.CAT_SLAM);
+
+  // Darkening the corners is most of what stops a flat 2D frame reading flat.
+  const vignette = ctx.createRadialGradient(
+    VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.34,
+    VIEW_W / 2, VIEW_H / 2, VIEW_W * 0.72,
+  );
+  vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+  vignette.addColorStop(1, "rgba(24, 12, 4, 0.34)");
 
   return {
     ctx,
@@ -250,13 +289,21 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       run: [flip(runA), runA, flip(runB), runB],
       jump: [flip(jump), jump],
       cling: [flip(cling), cling],
+      spin: [flip(spin), spin],
+      slide: [flip(slide), slide],
+      slam: [flip(slam), slam],
     },
+    // Authored facing left, so the pair is the other way round to the rest.
+    boss: [boss, flip(boss)],
+    vignette,
     dog: {
       terrier: { walk: [flip(dog), dog], scratch: [flip(dogScratch), dogScratch] },
       retriever: {
         walk: [flip(retriever), retriever],
         scratch: [flip(retrieverScratch), retrieverScratch],
       },
+      hedgehog: { walk: [flip(hedgehog), hedgehog], scratch: [flip(hedgehog), hedgehog] },
+      wasp: { walk: [flip(wasp), wasp], scratch: [flip(wasp), wasp] },
     },
     dogSquashed: bake(art.DOG_SQUASHED),
     flower: bake(art.FLOWER),
@@ -264,8 +311,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     tiles: new Map([
       [Tile.Ground, bake(art.GROUND)],
       [Tile.Brick, bake(art.LOG)],
-      [Tile.Box, bake(art.STUMP)],
       [Tile.Sand, bake(art.SAND)],
+      [Tile.CratePlain, bake(art.CRATE_PLAIN)],
+      [Tile.CrateTnt, bake(art.CRATE_TNT)],
+      [Tile.CrateNitro, bake(art.CRATE_NITRO)],
+      [Tile.CrateBounce, bake(art.CRATE_BOUNCE)],
+      [Tile.CrateCheck, bake(art.CRATE_CHECK)],
     ]),
     ground: {
       spring: seasonGround("spring"),
@@ -294,11 +345,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     ghost: [],
     waterfalls: [],
     post: {
-      idle: bake(art.FLAG, { y: "#9aa7ad", e: "#6d7a80" }),
-      taken: bake(art.FLAG, { y: "#8ce66a", e: "#3f9a49" }),
+      idle: flip(bake(art.FLAG, { y: "#9aa7ad", e: "#6d7a80" })),
+      taken: flip(bake(art.FLAG, { y: "#8ce66a", e: "#3f9a49" })),
     },
     fontLight: bakeFont("#fff6e2"),
     fontDark: bakeFont("#2a1c14"),
+    fontDim: bakeFont("#9a8977"),
   };
 }
 
@@ -448,11 +500,11 @@ function drawWeather(
   const count = Math.round(best.count * strength);
   for (let i = 0; i < count; i++) {
     const sway = Math.sin(time * 1.4 + i * 1.7) * best.sway;
-    const x = (((i * 71) % (VIEW_W + 24)) - camX * 0.4 + sway) % (VIEW_W + 24);
-    const y = ((i * 43 + time * best.fall) % (VIEW_H + 20)) - 10;
+    const x = (((i * 71) % (BG_W + 24)) - camX * 0.4 + sway) % (BG_W + 24);
+    const y = ((i * 43 + time * best.fall) % (BG_H + 20)) - 10;
     ctx.fillStyle = best.colors[i % 2]!;
     const size = best.size === 1 && i % 3 === 0 ? 2 : best.size;
-    ctx.fillRect(Math.round(x < 0 ? x + VIEW_W + 24 : x) - 12, Math.round(y), size, size);
+    ctx.fillRect(Math.round(x < 0 ? x + BG_W + 24 : x) - 12, Math.round(y), size, size);
   }
 }
 
@@ -472,7 +524,7 @@ type Tree = {
 export function buildForest(level: Level): readonly Tree[] {
   const trees: Tree[] = [];
   const span = level.width * TILE;
-  for (let x = -80; x < span + 80; x += 9) {
+  for (let x = -160; x < span + 160; x += 18) {
     const far = hash(x) < 0.62;
     trees.push({
       x,
@@ -506,7 +558,7 @@ const RIDGE_FAR_PARALLAX = 0.11;
 function waterfallsFor(level: Level): readonly number[] {
   const out: number[] = [];
   const span = level.width * TILE;
-  for (let x = 200; x < span * 1.2; x += 300) {
+  for (let x = 400; x < span * 1.2; x += 600) {
     const at = x + Math.floor(hash(x) * 120);
     if (ridgeHeight(at, false) > 38) out.push(at);
   }
@@ -571,12 +623,12 @@ function drawForest(
 
   for (const tree of r.forest) {
     if (tree.far !== far) continue;
-    const x = tree.x - camX * speed;
-    if (x < -30 || x > VIEW_W + 30) continue;
+    const x = tree.x / BG_SCALE - camX * speed;
+    if (x < -30 || x > BG_W + 30) continue;
 
     // Parallax slides trees relative to the world, so the species has to come
     // from where the tree is drawn, not from the x it was generated at.
-    const worldX = camX + x;
+    const worldX = (camX + x) * BG_SCALE;
     const season = seasonAt(level, worldX);
     // Palms crowd the shoreline, and grow in summer besides.
     const shore = level.water ? level.water.fromTile * TILE : Number.POSITIVE_INFINITY;
@@ -608,7 +660,7 @@ function drawRidge(
     const cap = mix(palette.hillNear, palette.sky, near ? 0.24 : 0.46);
     const drop = near ? 4 : 0;
 
-    for (let x = 0; x < VIEW_W; x += 2) {
+    for (let x = 0; x < BG_W; x += 2) {
       const h = Math.round(ridgeHeight(camX * speed + x, near) / 2) * 2;
       const top = Math.round(base - h + drop);
       ctx.fillStyle = css(body);
@@ -634,8 +686,8 @@ function drawWaterfalls(
   const base = FOREST_BASE - camY * FOREST_PARALLAX + 8;
 
   for (const wx of r.waterfalls) {
-    const x = wx - camX * RIDGE_FAR_PARALLAX;
-    if (x < -12 || x > VIEW_W + 12) continue;
+    const x = wx / BG_SCALE - camX * RIDGE_FAR_PARALLAX;
+    if (x < -12 || x > BG_W + 12) continue;
     const crest = base - ridgeHeight(camX * RIDGE_FAR_PARALLAX + x, false) + 4;
     const height = base - crest;
     if (height < 10) continue;
@@ -684,14 +736,20 @@ function drawBackground(
   const ctx = r.ctx;
   const horizon = FOREST_BASE - camY * FOREST_PARALLAX;
 
-  const sky = ctx.createLinearGradient(0, 0, 0, VIEW_H);
-  sky.addColorStop(0, css(palette.sky));
-  sky.addColorStop(1, css(palette.horizon));
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  // Posterised rather than smooth, with an ordered dither across each seam:
+  // a clean gradient is the one thing no game of this era could draw.
+  const BANDS = 14;
+  const bandH = Math.ceil(BG_H / BANDS);
+  for (let b = 0; b < BANDS; b++) {
+    ctx.fillStyle = css(mix(palette.sky, palette.horizon, b / (BANDS - 1)));
+    ctx.fillRect(0, b * bandH, BG_W, bandH);
+    if (b === 0) continue;
+    ctx.fillStyle = css(mix(palette.sky, palette.horizon, (b - 0.5) / (BANDS - 1)));
+    for (let x = (b % 2) * 2; x < BG_W; x += 4) ctx.fillRect(x, b * bandH, 2, 2);
+  }
 
   // Sun rides just above the treeline, which is what sells the autumn sunset.
-  const sunX = ((VIEW_W * 1.4 - camX * 0.12) % (VIEW_W + 160)) - 40;
+  const sunX = ((BG_W * 1.4 - camX * 0.12) % (BG_W + 160)) - 40;
   ctx.fillStyle = css(palette.sun);
   const sunY = horizon - 46;
   for (let row = -13; row < 13; row += 2) {
@@ -770,16 +828,16 @@ function drawWater(
   ctx.fillStyle = "#3f92c4";
   ctx.fillRect(x, top, VIEW_W - x, VIEW_H - top);
   ctx.fillStyle = "#57a8d6";
-  ctx.fillRect(x, top, VIEW_W - x, 6);
+  ctx.fillRect(x, top, VIEW_W - x, 12);
 
   ctx.fillStyle = "#bfe4f6";
-  for (let i = x; i < VIEW_W; i += 2) {
-    const lift = Math.round(Math.sin(state.time * 2.6 + i * 0.14) * 1.6);
-    ctx.fillRect(i, top + lift, 2, 2);
+  for (let i = x; i < VIEW_W; i += 4) {
+    const lift = Math.round(Math.sin(state.time * 2.6 + i * 0.07) * 3.2);
+    ctx.fillRect(i, top + lift, 4, 4);
   }
   // A thin line of foam where the sea meets the sand.
   ctx.fillStyle = "#eaf6fd";
-  ctx.fillRect(x, top + 2 + Math.round(Math.sin(state.time * 3) * 1), Math.min(10, VIEW_W - x), 2);
+  ctx.fillRect(x, top + 4 + Math.round(Math.sin(state.time * 3) * 2), Math.min(20, VIEW_W - x), 4);
 }
 
 function drawTiles(r: Renderer, state: GameState, camX: number, camY: number): void {
@@ -799,11 +857,133 @@ function drawTiles(r: Renderer, state: GameState, camX: number, camY: number): v
       const sprite =
         tile === Tile.Ground ? (buried ? ground.body : ground.top) : r.tiles.get(tile);
       if (!sprite) continue;
-      const bump = state.bumps.get(ty * level.width + tx) ?? 0;
-      const lift = bump > 0 ? Math.round(Math.sin((bump / 0.18) * Math.PI) * 5) : 0;
-      r.ctx.drawImage(sprite.canvas, tx * TILE - camX, ty * TILE - camY - lift);
+      const index = ty * level.width + tx;
+      const bump = state.bumps.get(index) ?? 0;
+      const lift = bump > 0 ? Math.round(Math.sin((bump / 0.18) * Math.PI) * 10) : 0;
+      const x = tx * TILE - camX;
+      const y = ty * TILE - camY - lift;
+      r.ctx.drawImage(sprite.canvas, x, y);
+
+      // A lit fuse flashes faster as it runs out; it is the only warning there is.
+      const fuse = state.crates.get(index)?.fuse ?? 0;
+      if (fuse > 0) {
+        const urgency = 1 + (1 - fuse / 3) * 8;
+        if (Math.floor(state.time * urgency * 3) % 2 === 0) {
+          r.ctx.globalAlpha = 0.45;
+          r.ctx.fillStyle = "#fff4d0";
+          r.ctx.fillRect(x, y, TILE, TILE);
+          r.ctx.globalAlpha = 1;
+        }
+      }
     }
   }
+}
+
+/** How far a body can be off the ground before its shadow stops reading. */
+const SHADOW_REACH = 200;
+
+/**
+ * An elliptical shadow that shrinks and fades with height. Cheap, and it does
+ * more for the sense of a third dimension than any amount of sprite detail.
+ */
+function drawShadow(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  camX: number,
+  camY: number,
+): void {
+  const left = Math.floor(x / TILE);
+  const right = Math.floor((x + w - 1) / TILE);
+  let floor: number | null = null;
+  for (let ty = Math.floor((y + h) / TILE); ty < level.height; ty++) {
+    for (let tx = left; tx <= right; tx++) {
+      if (solidAt(level, tx, ty)) {
+        floor = ty * TILE;
+        break;
+      }
+    }
+    if (floor !== null) break;
+  }
+  if (floor === null) return;
+
+  const drop = floor - (y + h);
+  if (drop > SHADOW_REACH) return;
+  const near = 1 - Math.max(0, drop) / SHADOW_REACH;
+  const rx = (w / 2) * (0.5 + near * 0.5);
+
+  ctx.globalAlpha = 0.14 + near * 0.28;
+  ctx.fillStyle = "#180f06";
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2 - camX, floor + 3 - camY, rx, rx * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/** Splinters thrown out of whatever just came apart. */
+function drawDebris(r: Renderer, state: GameState, camX: number, camY: number): void {
+  const ctx = r.ctx;
+  for (const piece of state.debris) {
+    const t = 1 - piece.life / DEBRIS_TIME;
+    const sprite = r.tiles.get(piece.tile);
+    ctx.globalAlpha = Math.max(0, 1 - t * 1.2);
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + piece.x;
+      const dist = t * 40;
+      const px = piece.x + TILE / 2 + Math.cos(angle) * dist - camX;
+      const py = piece.y + TILE / 2 + Math.sin(angle) * dist + t * t * 60 - camY;
+      ctx.fillStyle = sprite ? "#d8a24a" : "#a9762c";
+      ctx.fillRect(Math.round(px), Math.round(py), 6, 6);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/**
+ * Blades rooted below the frame. Only their tips cross the play plane, so
+ * nothing the player has to see can hide behind them.
+ */
+const OCCLUDER_PARALLAX = 1.28;
+const OCCLUDER_SPACING = 96;
+
+function drawOccluders(r: Renderer, camX: number, palette: Palette): void {
+  const ctx = r.ctx;
+  // Faint and shallow: depth cue only, never something a hazard can hide behind.
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = css(mix(palette.hillNear, [14, 10, 8], 0.55));
+  const shift = camX * OCCLUDER_PARALLAX;
+  const first = Math.floor(shift / OCCLUDER_SPACING) - 1;
+
+  for (let i = first; i < first + Math.ceil(VIEW_W / OCCLUDER_SPACING) + 3; i++) {
+    const x = Math.round(i * OCCLUDER_SPACING + hash(i * 17) * 50 - shift);
+    if (x < -70 || x > VIEW_W + 70) continue;
+    const tuft = 12 + hash(i * 31) * 16;
+    for (let b = 0; b < 5; b++) {
+      const root = x + b * 9 - 18;
+      const lean = (hash(i * 7 + b * 3) - 0.5) * 16;
+      const height = tuft * (0.55 + hash(i * 3 + b) * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(root, VIEW_H);
+      ctx.lineTo(root + lean, VIEW_H - height);
+      ctx.lineTo(root + 7, VIEW_H);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** A warm pass and darkened corners, over the finished frame. */
+function drawGrade(r: Renderer): void {
+  const ctx = r.ctx;
+  ctx.globalCompositeOperation = "overlay";
+  ctx.fillStyle = "rgba(255, 166, 84, 0.10)";
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = r.vignette;
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 }
 
 function catFrame(r: Renderer, state: GameState): Sprite {
@@ -811,11 +991,15 @@ function catFrame(r: Renderer, state: GameState): Sprite {
   const side = p.facing > 0 ? 1 : 0;
 
   if (state.phase === "dying") return r.cat.jump[side]!;
+  // A spin flips every couple of frames, which is what reads as spinning.
+  if (p.action === "spin") return r.cat.spin[Math.floor(state.time * 30) % 2]!;
+  if (p.action === "slide") return r.cat.slide[side]!;
+  if (p.action === "slam" || p.action === "recover") return r.cat.slam[side]!;
   if (p.cling !== 0) return r.cat.cling[side]!;
   if (!p.grounded) return r.cat.jump[side]!;
   if (Math.abs(p.vx) < 2) return r.cat.idle[side]!;
 
-  const frame = Math.floor(p.runTime / 9) % 2;
+  const frame = Math.floor(p.runTime / 18) % 2;
   return r.cat.run[frame * 2 + side]!;
 }
 
@@ -879,86 +1063,165 @@ function drawSparkle(
     const big = phase > 0.12 && phase < 0.3;
 
     ctx.fillStyle = i % 2 === 0 ? "#ffffff" : "#fff3ac";
-    ctx.fillRect(x, y, 1, 1);
+    ctx.fillRect(x, y, 2, 2);
     if (big) {
       // A four-armed twinkle rather than a plain dot.
-      ctx.fillRect(x - 1, y, 1, 1);
-      ctx.fillRect(x + 1, y, 1, 1);
-      ctx.fillRect(x, y - 1, 1, 1);
-      ctx.fillRect(x, y + 1, 1, 1);
+      ctx.fillRect(x - 2, y, 2, 2);
+      ctx.fillRect(x + 2, y, 2, 2);
+      ctx.fillRect(x, y - 2, 2, 2);
+      ctx.fillRect(x, y + 2, 2, 2);
     }
   }
 }
 
 function drawHud(r: Renderer, state: GameState, best: number): void {
   const ctx = r.ctx;
-  const lines = [
-    `SCORE ${String(state.score).padStart(5, "0")}`,
-    `BEST ${String(best).padStart(5, "0")}`,
-    `TIME ${formatTime(state.runTime)}`,
-    `PICKED ${harvest(state)}`,
-    `LIVES ${state.lives}`,
+  // Two rows: the run above, what the run is earning below. One row of six
+  // fields does not fit the frame at this glyph size.
+  const rows = [
+    [
+      `SCORE ${String(state.score).padStart(5, "0")}`,
+      `BEST ${String(best).padStart(5, "0")}`,
+      `TIME ${formatTime(state.runTime)}`,
+    ],
+    [
+      // Crates are the currency the boat is bought with, so they lead.
+      `CRATES ${state.cratesBroken}/${state.crateTotal}`,
+      `FLOWERS ${state.flowerCount}`,
+      `LIVES ${state.lives}`,
+    ],
   ];
 
   ctx.fillStyle = "rgba(20, 14, 10, 0.45)";
-  ctx.fillRect(0, 0, VIEW_W, 11);
-  let x = 5;
-  for (const line of lines) {
-    drawText(ctx, r.fontLight, line, x, 3);
-    x += textWidth(line) + 6;
-  }
+  ctx.fillRect(0, 0, VIEW_W, 38);
+  rows.forEach((row, i) => {
+    let x = 10;
+    for (const line of row) {
+      drawText(ctx, r.fontLight, line, x, 4 + i * 16);
+      x += textWidth(line) + 14;
+    }
+  });
 }
 
 function drawBanner(r: Renderer, title: string, ...lines: readonly string[]): void {
   const ctx = r.ctx;
-  const width = Math.max(textWidth(title), ...lines.map(textWidth)) + 24;
-  const height = 22 + lines.length * 10;
+  const width = Math.max(textWidth(title), ...lines.map(textWidth)) + 48;
+  const height = 44 + lines.length * 20;
   const x = Math.round((VIEW_W - width) / 2);
-  const y = Math.round(90 - height / 2);
+  const y = Math.round(VIEW_H / 2 - height / 2);
 
   ctx.fillStyle = "rgba(20, 14, 10, 0.72)";
   ctx.fillRect(x, y, width, height);
-  drawText(ctx, r.fontLight, title, Math.round((VIEW_W - textWidth(title)) / 2), y + 8);
+  drawText(ctx, r.fontLight, title, Math.round((VIEW_W - textWidth(title)) / 2), y + 16);
   lines.forEach((line, i) => {
-    drawText(ctx, r.fontLight, line, Math.round((VIEW_W - textWidth(line)) / 2), y + 20 + i * 10);
+    drawText(ctx, r.fontLight, line, Math.round((VIEW_W - textWidth(line)) / 2), y + 40 + i * 20);
   });
 }
 
-/** Drawn over a frozen frame, so the loop can keep rendering while paused. */
-/** The pause screen is where people look for controls, so it lists them. */
-const PAUSE_LINES: readonly string[] = [
-  "ESC RESUME    R RESTART",
-  "",
-  "ARROWS MOVE    SPACE JUMP    SHIFT RUN",
-  "HOLD INTO A WALL IN MID-AIR TO CLING",
-  "THEN SPACE TO KICK OFF IT",
+/**
+ * The pause screen is the only place the controls are written down, so it
+ * carries the whole scheme rather than a reminder of it. The pad column leads:
+ * this is a pad game, and the keyboard is the fallback. The font has no button
+ * glyphs, which is no loss — names read faster than symbols anyway.
+ */
+type ControlRow = readonly [action: string, pad: string, keyboard: string];
+
+const CONTROL_ROWS: readonly ControlRow[] = [
+  ["", "PS5 PAD", "KEYBOARD"],
+  ["MOVE", "STICK OR D-PAD", "ARROWS OR WASD"],
+  ["RUN", "R2 OR CIRCLE", "SHIFT"],
+  ["JUMP", "CROSS", "SPACE"],
+  ["SPIN", "SQUARE", "X OR K"],
+  ["SLIDE", "L1 R1 OR L2", "DOWN WHEN RUNNING"],
+  ["BODY SLAM", "L1 R1 OR L2", "DOWN IN THE AIR"],
+  ["PAUSE", "OPTIONS", "ESC"],
+  ["RESTART", "", "R"],
 ];
 
-export function drawPause(r: Renderer, best: number): void {
+/** The three things about the moveset that are not obvious from a key list. */
+const PAUSE_NOTES: readonly string[] = [
+  "HOLD INTO A WALL IN MID-AIR TO CLING THEN JUMP",
+  "A SPIN CANCELS INTO A JUMP. A SLIDE NEEDS SPEED",
+  "SLIDE UNDER A ROOF TOO LOW TO STAND UP IN",
+];
+
+/** The pause screen's actionable half. Index into this is what main.ts tracks. */
+export const PAUSE_MENU: readonly string[] = ["RESUME", "RESTART"];
+
+const PAUSE_LINE_H = 16;
+const PAUSE_MENU_H = 20;
+const PAUSE_COL_GAP = textWidth("   ");
+
+export function drawPause(r: Renderer, best: number, selected: number): void {
   const ctx = r.ctx;
   ctx.fillStyle = "rgba(16, 12, 9, 0.62)";
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
-  const lines = [...PAUSE_LINES, "", `BEST ${formatTime(best)}`];
-  const width = Math.max(...lines.map(textWidth), textWidth("PAUSED")) + 26;
-  const height = 22 + lines.length * 9 + 10;
+  const cols = [0, 1, 2].map((c) =>
+    Math.max(...CONTROL_ROWS.map((row) => textWidth(row[c]!))),
+  );
+  const tableW = cols[0]! + cols[1]! + cols[2]! + PAUSE_COL_GAP * 2;
+  const best_ = `BEST ${String(best).padStart(5, "0")}`;
+  const width =
+    Math.max(tableW, ...PAUSE_NOTES.map(textWidth), textWidth(best_)) + 48;
+  const height =
+    52 +
+    PAUSE_MENU.length * PAUSE_MENU_H +
+    16 +
+    CONTROL_ROWS.length * PAUSE_LINE_H +
+    12 +
+    PAUSE_NOTES.length * PAUSE_LINE_H +
+    24;
   const x = Math.round((VIEW_W - width) / 2);
   const y = Math.round((VIEW_H - height) / 2);
 
-  ctx.fillStyle = "rgba(20, 14, 10, 0.82)";
+  ctx.fillStyle = "rgba(20, 14, 10, 0.86)";
   ctx.fillRect(x, y, width, height);
-  drawText(ctx, r.fontLight, "PAUSED", Math.round((VIEW_W - textWidth("PAUSED")) / 2), y + 9);
+  drawText(ctx, r.fontLight, "PAUSED", Math.round((VIEW_W - textWidth("PAUSED")) / 2), y + 16);
 
-  lines.forEach((line, i) => {
-    if (!line) return;
-    drawText(ctx, r.fontLight, line, Math.round((VIEW_W - textWidth(line)) / 2), y + 24 + i * 9);
+  // The menu first: it is the only part of this screen you can act on.
+  let row = y + 44;
+  PAUSE_MENU.forEach((item, i) => {
+    const on = i === selected;
+    const w = textWidth(item);
+    const itemX = Math.round((VIEW_W - w) / 2);
+    if (on) {
+      ctx.fillStyle = "#e8933c";
+      ctx.fillRect(itemX - 22, row + 1, 10, 10);
+      ctx.fillRect(itemX + w + 12, row + 1, 10, 10);
+    }
+    drawText(ctx, on ? r.fontLight : r.fontDim, item, itemX, row);
+    row += PAUSE_MENU_H;
   });
+  row += 16;
+
+  // The table is left-aligned in its own block, centred as a whole.
+  const left = Math.round((VIEW_W - tableW) / 2);
+  const starts = [left, left + cols[0]! + PAUSE_COL_GAP, left + cols[0]! + cols[1]! + PAUSE_COL_GAP * 2];
+  CONTROL_ROWS.forEach(([action, pad, keyboard], i) => {
+    // The header names the columns and should not compete with them.
+    const font = i === 0 ? r.fontDim : r.fontLight;
+    drawText(ctx, font, action, starts[0]!, row);
+    drawText(ctx, font, pad, starts[1]!, row);
+    // The keyboard is the fallback, and reads as one.
+    drawText(ctx, r.fontDim, keyboard, starts[2]!, row);
+    row += PAUSE_LINE_H;
+  });
+
+  row += 12;
+  for (const note of PAUSE_NOTES) {
+    drawText(ctx, r.fontDim, note, Math.round((VIEW_W - textWidth(note)) / 2), row);
+    row += PAUSE_LINE_H;
+  }
+  drawText(ctx, r.fontLight, best_, Math.round((VIEW_W - textWidth(best_)) / 2), row + 10);
 }
 
 /** Coat colour, for the scratching leg drawn over the sprite. */
 const FUR: Readonly<Record<Breed, string>> = {
   terrier: "#c08a55",
   retriever: "#e6c88b",
+  hedgehog: "#6b5f57",
+  wasp: "#f2c53d",
 };
 
 const ENDING_TITLE: Readonly<Record<Ending, string>> = {
@@ -979,9 +1242,9 @@ export type Hud = {
 const WALK_TO_BOAT = 0.4;
 const BOARDED = 1.6;
 const CAST_OFF = 2.6;
-const BOAT_SPEED = 52;
+const BOAT_SPEED = 104;
 /** Row 8 of every hull sprite is its deck, whatever the sprite's height. */
-const HULL_DECK_ROW = 8;
+const HULL_DECK_ROW = 16;
 
 type Outro = {
   readonly t: number;
@@ -1000,10 +1263,10 @@ type Outro = {
 function outroFor(state: GameState): Outro | null {
   if (state.phase !== "won" || !state.goal) return null;
   const t = Math.max(0, state.time - state.wonAt);
-  const ending = endingFor(harvest(state));
+  const ending = endingFor(cratePercent(state));
   const water = state.level.water;
   // Moored just off the beach, not floating over the grass.
-  const dock = water ? water.fromTile * TILE + 10 : state.goal.x + 34;
+  const dock = water ? water.fromTile * TILE + 20 : state.goal.x + 68;
   // Nothing to board on the shore ending: the cat simply stays and waves.
   const sailed = ending === "shore" ? 0 : Math.max(0, t - CAST_OFF) * BOAT_SPEED;
   const boatX = dock + sailed;
@@ -1039,17 +1302,14 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
   const palette = outro
     ? mixPalette(blendPalette(state.level, camX), SEASON_PALETTE.summer, outro.summer)
     : blendPalette(state.level, camX);
-  drawBackground(r, state.level, mixed, camX, camY, palette, state.time);
+  ctx.save();
+  ctx.scale(BG_SCALE, BG_SCALE);
+  drawBackground(r, state.level, mixed, camX / BG_SCALE, camY / BG_SCALE, palette, state.time);
+  ctx.restore();
   drawDecorations(r, camX, camY, true);
   drawTiles(r, state, camX, camY);
   drawDecorations(r, camX, camY, false);
   drawWater(r, state, camX, camY);
-
-  for (const c of state.checkpoints) {
-    ctx.fillStyle = "#8a5f33";
-    ctx.fillRect(c.x + 2 - camX, c.y - camY, 3, TILE * 4);
-    ctx.drawImage((c.taken ? r.post.taken : r.post.idle).canvas, c.x - 11 - camX, c.y + 1 - camY);
-  }
 
   if (state.avalanche.active && state.chimney) {
     const shaft = state.chimney;
@@ -1057,34 +1317,59 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
     const x = Math.round(shaft.left - camX);
     const w = shaft.right - shaft.left;
     ctx.fillStyle = "#eef6fc";
-    ctx.fillRect(x, top + 3, w, Math.round(shaft.floorY - state.avalanche.y) + TILE);
+    ctx.fillRect(x, top + 6, w, Math.round(shaft.floorY - state.avalanche.y) + TILE);
     // A churned crest so the snow reads as moving, not as a rising box.
     ctx.fillStyle = "#ffffff";
-    for (let i = 0; i < w; i += 3) {
-      const lift = Math.round(Math.sin(state.time * 9 + i * 0.7) * 2);
-      ctx.fillRect(x + i, top + lift, 3, 5);
+    for (let i = 0; i < w; i += 6) {
+      const lift = Math.round(Math.sin(state.time * 9 + i * 0.35) * 4);
+      ctx.fillRect(x + i, top + lift, 6, 10);
     }
   }
 
+  // A checkpoint flies a flag on a pole three tiles tall, so a season's bank
+  // point is visible from across the screen — and stays visible once the crate
+  // under it is gone, raised and green instead of grey at half mast.
+  for (const post of state.posts) {
+    const tx = Math.floor(post.x / TILE);
+    const ty = Math.floor(post.y / TILE);
+    const banked = tileAt(state.level, tx, ty) !== Tile.CrateCheck;
+    const poleTop = post.y - TILE * 3;
+    // Centred on the crate tile: TILE / 2 less half the pole's own width.
+    const poleX = Math.round(post.x + TILE / 2 - 3 - camX);
+
+    ctx.fillStyle = banked ? "#8a5f33" : "#5e5044";
+    ctx.fillRect(poleX, Math.round(poleTop - camY), 5, TILE * 3 + (banked ? TILE : 0));
+    ctx.fillStyle = banked ? "#e0b070" : "#8d7d72";
+    ctx.fillRect(poleX - 3, Math.round(poleTop - camY), 11, 5);
+
+    const flag = banked ? r.post.taken : r.post.idle;
+    // At half mast until the crate is broken, at the top once it is.
+    const lift = banked ? 4 : TILE + 8;
+    ctx.drawImage(flag.canvas, poleX + 5, Math.round(poleTop + lift - camY));
+  }
+
+  drawDebris(r, state, camX, camY);
+
   for (const c of state.cacti) {
+    drawShadow(ctx, state.level, c.x, c.y, CACTUS_W, CACTUS_H, camX, camY);
     drawSprite(ctx, r.cactus, c.x, c.y, CACTUS_W, CACTUS_H, camX, camY);
   }
 
   if (state.goal) {
     const pole = state.goal;
     ctx.fillStyle = "#8a5f33";
-    ctx.fillRect(pole.x + 2 - camX, pole.y - camY, 3, pole.h);
+    ctx.fillRect(pole.x + 4 - camX, pole.y - camY, 6, pole.h);
     ctx.fillStyle = "#e0b070";
-    ctx.fillRect(pole.x - camX, pole.y - 3 - camY, 7, 3);
-    ctx.drawImage(r.flag.canvas, pole.x - 11 - camX, pole.y + 1 - camY);
+    ctx.fillRect(pole.x - camX, pole.y - 6 - camY, 14, 6);
+    ctx.drawImage(r.flag.canvas, pole.x - 22 - camX, pole.y + 2 - camY);
   }
 
   for (const f of state.flowers) {
     if (f.taken) continue;
-    const bob = Math.round(Math.sin(state.time * 4 + f.x) * 1.5);
+    const bob = Math.round(Math.sin(state.time * 4 + f.x) * 3);
     drawSprite(ctx, r.flower, f.x, f.y + bob, FLOWER_W, FLOWER_H, camX, camY);
     drawSparkle(
-      ctx, f.x + FLOWER_W / 2, f.y + bob + FLOWER_H / 2, 10, state.time, f.x, camX, camY,
+      ctx, f.x + FLOWER_W / 2, f.y + bob + FLOWER_H / 2, 20, state.time, f.x, camX, camY,
     );
   }
 
@@ -1097,7 +1382,7 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
       ctx, r.monstera, m.x, m.y, MONSTERA_W, MONSTERA_H, camX, camY, lean * LEAF_TILT + rock,
     );
     drawSparkle(
-      ctx, m.x + MONSTERA_W / 2, m.y + MONSTERA_H / 2, 14, state.time, m.y, camX, camY,
+      ctx, m.x + MONSTERA_W / 2, m.y + MONSTERA_H / 2, 28, state.time, m.y, camX, camY,
     );
   }
 
@@ -1115,7 +1400,7 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
       } else if (d.action === "sniff") {
         sprite = poses.walk[side]!;
         // Nose to the ground, with a slow snuffle.
-        nudge = 1 + (Math.floor(state.time * 6) % 2);
+        nudge = 2 + (Math.floor(state.time * 6) % 2) * 2;
       } else {
         sprite = poses.walk[side]!;
       }
@@ -1123,6 +1408,7 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
 
     const dx = lerp(d.px, d.x, alpha);
     const dy = lerp(d.py, d.y, alpha) + nudge;
+    if (d.alive) drawShadow(ctx, state.level, dx, dy, traits.w, traits.h, camX, camY);
     drawSprite(ctx, sprite, dx, dy, traits.w, traits.h, camX, camY);
 
     // The hind leg is drawn on top and animated: at this size the motion is
@@ -1130,17 +1416,47 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
     if (d.alive && d.action === "scratch") {
       const beat = Math.floor(state.time * 15) % 2;
       // Mirrored properly: the leg sits just behind the head on either side.
-      const legX = Math.round(dx + (side === 1 ? traits.w - 7 : 5) - camX);
+      const legX = Math.round(dx + (side === 1 ? traits.w - 14 : 10) - camX);
       // Reaching up to the ear, not floating above the dog.
-      const legY = Math.round(dy - 1 + beat - camY);
+      const legY = Math.round(dy - 2 + beat * 2 - camY);
       // Two segments with a kink: a straight bar reads as a post, not a leg.
-      const toward = side === 1 ? 1 : -1;
-      ctx.fillStyle = "#241a17";
-      ctx.fillRect(legX - 1, legY + 3, 4, 6);
-      ctx.fillRect(legX - 1 + toward, legY, 4, 5);
+      const toward = side === 1 ? 2 : -2;
+      ctx.fillStyle = "#3a2a22";
+      ctx.fillRect(legX - 2, legY + 6, 8, 12);
+      ctx.fillRect(legX - 2 + toward, legY, 8, 10);
       ctx.fillStyle = FUR[d.breed];
-      ctx.fillRect(legX, legY + 4, 2, 4);
-      ctx.fillRect(legX + toward, legY + 1, 2, 4);
+      ctx.fillRect(legX, legY + 8, 4, 8);
+      ctx.fillRect(legX + toward, legY + 2, 4, 8);
+    }
+  }
+
+  const boss = state.boss;
+  if (boss && boss.mode !== "dead") {
+    const bx = lerp(boss.px, boss.x, alpha);
+    const by = lerp(boss.py, boss.y, alpha);
+    // Braced low through a charge, and shaking while it is dazed.
+    const dazed = boss.mode === "stunned" || boss.mode === "hurt";
+    const shake = dazed ? Math.round(Math.sin(state.time * 40) * 2) : 0;
+    const side = boss.facing > 0 ? 1 : 0;
+    drawShadow(ctx, state.level, bx, by, BOSS_W, BOSS_H, camX, camY);
+    drawSprite(ctx, r.boss[side]!, bx + shake, by, BOSS_W, BOSS_H, camX, camY);
+
+    if (dazed) {
+      // Stars, so the one window you can hit it in is unmissable.
+      for (let i = 0; i < 3; i++) {
+        const a = state.time * 4 + (i / 3) * Math.PI * 2;
+        const sx = Math.round(bx + BOSS_W / 2 + Math.cos(a) * 26 - camX);
+        const sy = Math.round(by - 12 + Math.sin(a) * 7 - camY);
+        ctx.fillStyle = "#ffd34d";
+        ctx.fillRect(sx - 2, sy, 6, 2);
+        ctx.fillRect(sx, sy - 2, 2, 6);
+      }
+    }
+
+    // Phases left, as a row of pips over its back.
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < boss.phase ? "#4a3a30" : "#e05a4a";
+      ctx.fillRect(Math.round(bx + 8 + i * 14 - camX), Math.round(by - 26 - camY), 10, 6);
     }
   }
 
@@ -1151,12 +1467,12 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
     const boat = outro.ending === "shore" ? null : r.boat[outro.ending];
     let deck = py;
     if (boat) {
-      const bob = Math.round(Math.sin(state.time * 2.2) * 1.5);
+      const bob = Math.round(Math.sin(state.time * 2.2) * 3);
       // Float the deck just above the waterline rather than sinking the hull.
       const hullY =
         outro.boatY !== null
-          ? outro.boatY - HULL_DECK_ROW - 2 + bob
-          : py + PLAYER_H - 20;
+          ? outro.boatY - HULL_DECK_ROW - 4 + bob
+          : py + PLAYER_H - 40;
       // Step down so the cat stands on the deck, not in the sea.
       const deckTop = hullY + HULL_DECK_ROW - PLAYER_H;
       deck = py + (deckTop - py) * outro.board;
@@ -1167,10 +1483,19 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
     const frame = outro.aboard ? r.cat.idle[1]! : r.cat.run[stride * 2 + 1]!;
     drawSprite(ctx, frame, outro.catX, deck, PLAYER_W, PLAYER_H, camX, camY);
   } else {
-    drawSprite(ctx, catFrame(r, state), px, py, PLAYER_W, PLAYER_H, camX, camY);
+    const boxH = playerHeight(state.player);
+    drawShadow(ctx, state.level, px, py, PLAYER_W, boxH, camX, camY);
+    drawSprite(ctx, catFrame(r, state), px, py, PLAYER_W, boxH, camX, camY);
   }
 
-  drawWeather(ctx, mixed, camX, state.time);
+  drawOccluders(r, camX, palette);
+
+  ctx.save();
+  ctx.scale(BG_SCALE, BG_SCALE);
+  drawWeather(ctx, mixed, camX / BG_SCALE, state.time);
+  ctx.restore();
+
+  drawGrade(r);
   drawHud(r, state, hud.best);
 
   if (state.phase === "won") {

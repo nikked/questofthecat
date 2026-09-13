@@ -7,12 +7,23 @@ crate-smashing moveset and a big dog on the shore.
 Vanilla TypeScript on Canvas 2D. No runtime dependencies, no asset files: every
 sprite and every sound is generated in code.
 
+Use Node.js 24 and pnpm 11, matching CI.
+
 ```sh
 pnpm install
 pnpm dev        # http://localhost:5173
 pnpm test       # vitest
 pnpm build      # tsc --noEmit && vite build
 ```
+
+## Deploying
+
+`.github/workflows/deploy.yml` tests and builds with the base path
+`/questofthecat/` on every pull request, and additionally publishes `dist` to
+GitHub Pages at https://nikked.github.io/questofthecat/ on every push to
+`main`. Running the workflow by hand from the Actions tab deploys whichever
+branch it is started from. Pages must be set to deploy from GitHub Actions in
+the repository settings.
 
 ## Playing
 

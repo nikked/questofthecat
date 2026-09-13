@@ -20,6 +20,7 @@ import {
   endingFor,
   playerHeight,
   timeBonus,
+  LIFE_BONUS_POINTS,
   CACTUS_H,
   CACTUS_W,
   BREEDS,
@@ -1525,7 +1526,7 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
         r,
         title,
         `${formatTime(state.runTime)}  SPEED BONUS ${bonus}`,
-        `SCORE ${state.score}`,
+        `SCORE ${state.score}  LIVES BONUS ${state.lives * LIFE_BONUS_POINTS}`,
         "PRESS R",
       );
     }

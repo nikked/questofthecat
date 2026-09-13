@@ -99,10 +99,12 @@ export const FLOWER_POINTS = 100;
 export const MONSTERA_POINTS = 500;
 export const STOMP_POINTS = 300;
 export const GOAL_POINTS = 1000;
+export const LIFE_BONUS_POINTS = 2500;
 export const BOSS_POINTS = 5000;
-/** Finishing inside this window pays a bonus that shrinks every second. */
-export const TIME_BONUS_WINDOW = 60;
-export const TIME_BONUS_RATE = 50;
+const TIME_BONUSES: readonly (readonly [seconds: number, points: number])[] = [
+  [30, 30000], [40, 20000], [50, 10000], [60, 5000],
+  [70, 2500], [80, 1500], [90, 500], [95, 0],
+];
 
 export const CACTUS_W = 24;
 export const CACTUS_H = 28;
@@ -1309,7 +1311,7 @@ function resolveContacts(state: GameState): void {
   if (state.goal && overlaps(rect, state.goal) && (!boss || boss.mode === "dead")) {
     state.phase = "won";
     state.wonAt = state.time;
-    state.score += GOAL_POINTS + timeBonus(state.runTime);
+    state.score += GOAL_POINTS + timeBonus(state.runTime) + state.lives * LIFE_BONUS_POINTS;
   }
 }
 
@@ -1425,7 +1427,17 @@ function stepAvalanche(state: GameState, dt: number): void {
 
 /** Speed pays, but never negatively: a slow run simply earns no bonus. */
 export function timeBonus(runTime: number): number {
-  return Math.max(0, Math.round((TIME_BONUS_WINDOW - runTime) * TIME_BONUS_RATE));
+  const [fastest, maximum] = TIME_BONUSES[0]!;
+  if (runTime <= fastest) return maximum;
+  for (let i = 1; i < TIME_BONUSES.length; i++) {
+    const [seconds, points] = TIME_BONUSES[i]!;
+    if (runTime <= seconds) {
+      const [previousSeconds, previousPoints] = TIME_BONUSES[i - 1]!;
+      const fraction = (runTime - previousSeconds) / (seconds - previousSeconds);
+      return Math.round(previousPoints + (points - previousPoints) * fraction);
+    }
+  }
+  return 0;
 }
 
 /** What the cat is carrying, in flower-equivalents. */

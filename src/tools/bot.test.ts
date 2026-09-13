@@ -164,7 +164,7 @@ it("the level can be finished without dying", () => {
   expect(state.runTime).toBeGreaterThan(5);
   expect(state.runTime).toBeLessThan(140);
   expect(state.boss?.mode).toBe("dead");
-  expect(endingFor(state.score)).toBe("raft");
+  expect(endingFor(state.score)).toBe("ship");
 });
 
 it("the shipped par ghost still matches this level", () => {

@@ -63,6 +63,22 @@ contact. Score comes from stomps and what you pick up, plus a bonus that shrinks
 the longer you take. Every hundredth flower buys a life back, and running out
 of lives restarts the level rather than ending the run.
 
+Finishing also earns **2,500 points per remaining life**.
+
+The speed bonus is interpolated between these finish times and rounded to whole
+points. Runs of 30 seconds or less earn 30,000. After 90 seconds, the bonus
+tapers from 500 to zero at 95 seconds.
+
+| Finish time | Speed bonus |
+|---|---:|
+| 90 seconds | 500 |
+| 80 seconds | 1,500 |
+| 70 seconds | 2,500 |
+| 60 seconds | 5,000 |
+| 50 seconds | 10,000 |
+| 40 seconds | 20,000 |
+| 30 seconds | 30,000 |
+
 The shore is guarded. The flag does not work until the big dog is down. It
 charges at wherever you are standing, so jump the charge and let it bury itself
 in one of the arena posts — the two seconds it spends stunned are the only

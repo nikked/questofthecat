@@ -19,8 +19,6 @@ import {
   GOAL_POINTS,
   MONSTERA_POINTS,
   STOMP_POINTS,
-  TIME_BONUS_RATE,
-  TIME_BONUS_WINDOW,
   timeBonus,
   MONSTERA_VALUE,
   PLAYER_H,
@@ -534,20 +532,35 @@ describe("scoring", () => {
     expect(state.score).toBe(STOMP_POINTS);
   });
 
-  it("rewards a fast finish and never punishes a slow one", () => {
-    expect(timeBonus(0)).toBe(TIME_BONUS_WINDOW * TIME_BONUS_RATE);
-    expect(timeBonus(TIME_BONUS_WINDOW)).toBe(0);
-    // Past the window the bonus floors rather than going negative.
-    expect(timeBonus(TIME_BONUS_WINDOW * 3)).toBe(0);
-    expect(timeBonus(10)).toBeGreaterThan(timeBonus(20));
+  it.each([
+    [30, 30000], [40, 20000], [50, 10000], [60, 5000],
+    [70, 2500], [80, 1500], [90, 500],
+    [35, 25000], [45, 15000], [55, 7500], [65, 3750],
+    [75, 2000], [85, 1000], [80.554, 1445], [80.556, 1444],
+    [0, 30000], [29.99, 30000], [90.01, 499], [92.5, 250], [95, 0], [180, 0],
+  ])("awards %s-second runs %s speed bonus points", (seconds, points) => {
+    expect(timeBonus(seconds)).toBe(points);
   });
 
-  it("adds the goal award and the speed bonus on the flag", () => {
+  it("has no reward jumps at the curve boundaries", () => {
+    for (const seconds of [30, 40, 50, 60, 70, 80, 90, 95]) {
+      const before = timeBonus(seconds - 0.001);
+      const after = timeBonus(seconds + 0.001);
+      expect(before).toBeGreaterThanOrEqual(after);
+      expect(before - after).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it.each([1, 3, 9, 10])("adds finish bonuses once with %s lives remaining", (lives) => {
     const state = start(["   ", "C G", "###"]);
+    state.lives = lives;
     run(state, 1.2, press({ right: true, run: true }));
 
     expect(state.phase).toBe("won");
-    expect(state.score).toBe(GOAL_POINTS + timeBonus(state.runTime));
+    expect(state.score).toBe(GOAL_POINTS + timeBonus(state.runTime) + lives * 2500);
+    const finalScore = state.score;
+    run(state, 5);
+    expect(state.score).toBe(finalScore);
   });
 
   it("resets to zero on a new run", () => {

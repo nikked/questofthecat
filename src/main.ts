@@ -7,8 +7,6 @@ import { LEVEL_1 } from "./levels";
 import { PAR_GHOST, PAR_SCORE } from "./ghost";
 import {
   PAUSE_MENU,
-  VIEW_H,
-  VIEW_W,
   buildScenery,
   createRenderer,
   drawPause,
@@ -252,18 +250,6 @@ scoreForm.addEventListener("submit", (event) => {
 });
 showMenu();
 loadBoard();
-
-function fitCanvas(): void {
-  const scale = Math.max(
-    1,
-    Math.floor(Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H)),
-  );
-  canvas!.style.width = `${VIEW_W * scale}px`;
-  canvas!.style.height = `${VIEW_H * scale}px`;
-}
-
-fitCanvas();
-window.addEventListener("resize", fitCanvas);
 
 let accumulator = 0;
 let previous = performance.now() / 1000;

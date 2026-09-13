@@ -99,12 +99,16 @@ export function listenControls(target: Window): Controls {
   };
 
   target.addEventListener("keydown", (event) => {
-    if (event.repeat) return;
+    if (event.repeat || event.target instanceof HTMLInputElement ||
+      (event.target instanceof HTMLElement && event.target.closest("dialog"))) return;
     if (event.code === "KeyR") restart = true;
     if (event.code === "Escape") pause = true;
     if (MENU_UP.has(event.code)) menu = -1;
     else if (MENU_DOWN.has(event.code)) menu = 1;
-    if (MENU_CONFIRM.has(event.code)) confirm = true;
+    if (MENU_CONFIRM.has(event.code)) {
+      confirm = true;
+      event.preventDefault();
+    }
     if (set(event.code, true)) event.preventDefault();
   });
 

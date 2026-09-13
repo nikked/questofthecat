@@ -16,7 +16,7 @@ import {
   BOSS_H,
   BOSS_W,
   DEBRIS_TIME,
-  cratePercent,
+  EXPLOSION_TIME,
   endingFor,
   playerHeight,
   timeBonus,
@@ -927,15 +927,35 @@ function drawShadow(
 function drawDebris(r: Renderer, state: GameState, camX: number, camY: number): void {
   const ctx = r.ctx;
   for (const piece of state.debris) {
-    const t = 1 - piece.life / DEBRIS_TIME;
+    const explosive = piece.tile === Tile.CrateNitro || piece.tile === Tile.CrateTnt;
+    const t = 1 - piece.life / (explosive ? EXPLOSION_TIME : DEBRIS_TIME);
+    if (explosive) {
+      const x = piece.x + TILE / 2 - camX;
+      const y = piece.y + TILE / 2 - camY;
+      const radius = TILE * (0.5 + t * 2);
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = piece.tile === Tile.CrateNitro ? "#baff45" : "#ff922e";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fffbd6";
+      ctx.beginPath();
+      ctx.arc(x, y, radius * (1 - t) * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fffbd6";
+      ctx.lineWidth = 4 * (1 - t);
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 1.25, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     const sprite = r.tiles.get(piece.tile);
     ctx.globalAlpha = Math.max(0, 1 - t * 1.2);
     for (let i = 0; i < 6; i++) {
       const angle = (i / 6) * Math.PI * 2 + piece.x;
-      const dist = t * 40;
+      const dist = t * (explosive ? 110 : 40);
       const px = piece.x + TILE / 2 + Math.cos(angle) * dist - camX;
       const py = piece.y + TILE / 2 + Math.sin(angle) * dist + t * t * 60 - camY;
-      ctx.fillStyle = sprite ? "#d8a24a" : "#a9762c";
+      ctx.fillStyle = explosive ? "#fff18a" : sprite ? "#d8a24a" : "#a9762c";
       ctx.fillRect(Math.round(px), Math.round(py), 6, 6);
     }
     ctx.globalAlpha = 1;
@@ -1085,8 +1105,6 @@ function drawHud(r: Renderer, state: GameState, best: number): void {
       `TIME ${formatTime(state.runTime)}`,
     ],
     [
-      // Crates are the currency the boat is bought with, so they lead.
-      `CRATES ${state.cratesBroken}/${state.crateTotal}`,
       `FLOWERS ${state.flowerCount}`,
       `LIVES ${state.lives}`,
     ],
@@ -1119,7 +1137,7 @@ function drawBanner(r: Renderer, title: string, ...lines: readonly string[]): vo
 }
 
 /**
- * The pause screen is the only place the controls are written down, so it
+ * The pause screen includes the controls, so it
  * carries the whole scheme rather than a reminder of it. The pad column leads:
  * this is a pad game, and the keyboard is the fallback. The font has no button
  * glyphs, which is no loss — names read faster than symbols anyway.
@@ -1146,7 +1164,7 @@ const PAUSE_NOTES: readonly string[] = [
 ];
 
 /** The pause screen's actionable half. Index into this is what main.ts tracks. */
-export const PAUSE_MENU: readonly string[] = ["RESUME", "RESTART"];
+export const PAUSE_MENU: readonly string[] = ["RESUME", "RESTART", "MAIN MENU"];
 
 const PAUSE_LINE_H = 16;
 const PAUSE_MENU_H = 20;
@@ -1263,11 +1281,10 @@ type Outro = {
 function outroFor(state: GameState): Outro | null {
   if (state.phase !== "won" || !state.goal) return null;
   const t = Math.max(0, state.time - state.wonAt);
-  const ending = endingFor(cratePercent(state));
+  const ending = endingFor(state.score);
   const water = state.level.water;
   // Moored just off the beach, not floating over the grass.
   const dock = water ? water.fromTile * TILE + 20 : state.goal.x + 68;
-  // Nothing to board on the shore ending: the cat simply stays and waves.
   const sailed = ending === "shore" ? 0 : Math.max(0, t - CAST_OFF) * BOAT_SPEED;
   const boatX = dock + sailed;
 
@@ -1512,4 +1529,55 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
       );
     }
   }
+}
+
+export function drawMainMenu(r: Renderer, time: number): void {
+  const ctx = r.ctx;
+  ctx.fillStyle = "#152338";
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  for (let i = 0; i < 65; i++) {
+    const x = Math.floor(hash(i * 7) * VIEW_W);
+    const y = Math.floor(hash(i * 13 + 2) * 230);
+    ctx.globalAlpha = 0.3 + (Math.sin(time * 1.5 + i) + 1) * 0.3;
+    ctx.fillStyle = "#fff0cb";
+    ctx.fillRect(x, y, i % 5 === 0 ? 3 : 2, 2);
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#f4ddb0";
+  ctx.beginPath();
+  ctx.arc(535, 65, 26, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#152338";
+  ctx.beginPath();
+  ctx.arc(524, 57, 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (let layer = 0; layer < 3; layer++) {
+    ctx.fillStyle = ["#243d50", "#2b5058", "#193e45"][layer]!;
+    ctx.beginPath();
+    ctx.moveTo(0, VIEW_H);
+    for (let x = 0; x <= VIEW_W; x += 8) {
+      const y = 225 + layer * 36 + Math.sin(x / (90 - layer * 15) + layer * 2 + time * 0.025) * 26;
+      ctx.lineTo(x, Math.round(y));
+    }
+    ctx.lineTo(VIEW_W, VIEW_H);
+    ctx.fill();
+  }
+  ctx.fillStyle = "#102b34";
+  for (const x of [20, 70, 570, 620]) drawPine(ctx, x, 320, 80 + hash(x) * 70);
+  ctx.fillStyle = "#50745a";
+  ctx.fillRect(0, 318, VIEW_W, 6);
+  ctx.fillStyle = "#132a30";
+  ctx.fillRect(0, 324, VIEW_W, 36);
+  const cat = r.cat.idle[1]!;
+  ctx.drawImage(cat.canvas, 82, 264 + Math.round(Math.sin(time * 2) * 2), PLAYER_W * 2, PLAYER_H * 2);
+  for (let i = 0; i < 12; i++) {
+    const x = hash(i * 9 + 1) * VIEW_W + Math.sin(time + i) * 10;
+    const y = 285 + Math.sin(time * 0.6 + i * 2) * 24;
+    ctx.globalAlpha = 0.25 + (Math.sin(time * 2 + i) + 1) * 0.3;
+    ctx.fillStyle = "#f7df85";
+    ctx.fillRect(Math.round(x), Math.round(y), 3, 3);
+  }
+  ctx.globalAlpha = 1;
+  drawGrade(r);
 }

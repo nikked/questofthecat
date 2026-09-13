@@ -1,4 +1,4 @@
-# A Cat's Year
+# Quest of the Cat
 
 A small arcade platformer: one run through five seasonal bands — spring, summer,
 autumn, a winter summit, and a spring thaw that ends at the sea, by way of a
@@ -17,8 +17,12 @@ pnpm build      # tsc --noEmit && vite build
 ## Playing
 
 **Play it on a pad.** A DualSense is the intended controller; the keyboard is
-the fallback. Nothing is written on the page — press Options (or Esc) and the
-pause screen carries the whole scheme.
+the fallback. The title screen offers Start Game and How to Play; choose with
+arrows or the D-pad and confirm with Enter or Cross. Mouse clicks work too.
+Press Options (or Esc) for the full controls, restart, or return to the main menu.
+
+Beating the high score at the goal prompts for your name. The score, name, and
+ghost are saved in this browser, and the main menu shows the top scorer.
 
 | | PS5 | Keyboard |
 |---|---|---|
@@ -40,13 +44,15 @@ momentum to start and ends itself, except under a roof too low to stand up in.
 
 Each season flies a **checkpoint flag**. Break the crate at its foot and the
 flag runs up the pole green — that is where the cat comes back to, and winter's
-is the one worth going out of your way for.
+is the one worth going out of your way for. Entry and checkpoint areas keep
+enemies at least two tiles away.
 
-**Which crates you break decides the ending**: clear under 40% and the cat waves
-from the shore, clear 90% and it sails out on a garlanded ship. Score comes from
-crates, stomps and what you pick up, plus a bonus that shrinks the longer you
-take. Every hundredth flower buys a life back, and running out of lives restarts
-the level rather than ending the run.
+Final score decides the ending: under 16,000 stays on shore, 16,000 earns a raft,
+26,000 a sailboat, and 36,000 a garlanded ship. Crates break but give no points
+or flowers, and do not affect the ending. Nitro detonates on
+contact. Score comes from stomps and what you pick up, plus a bonus that shrinks
+the longer you take. Every hundredth flower buys a life back, and running out
+of lives restarts the level rather than ending the run.
 
 The shore is guarded. The flag does not work until the big dog is down. It
 charges at wherever you are standing, so jump the charge and let it bury itself

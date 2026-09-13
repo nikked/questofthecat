@@ -6,7 +6,6 @@ import {
   PLAYER_H,
   PLAYER_W,
   createState,
-  cratePercent,
   endingFor,
   resetLevel,
   step,
@@ -165,15 +164,7 @@ it("the level can be finished without dying", () => {
   expect(state.runTime).toBeGreaterThan(5);
   expect(state.runTime).toBeLessThan(140);
   expect(state.boss?.mode).toBe("dead");
-});
-
-it("a run that only breaks what is in its way still earns a boat", () => {
-  const state = play();
-
-  // The bot smashes only the crates it collides with on the direct route, so
-  // this is the floor: anyone playing deliberately does better.
-  expect(cratePercent(state)).toBeGreaterThan(0);
-  expect(endingFor(100)).toBe("ship");
+  expect(endingFor(state.score)).toBe("raft");
 });
 
 it("the shipped par ghost still matches this level", () => {

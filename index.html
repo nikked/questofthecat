@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cat Quest</title>
+    <title>Quest of the Cat</title>
     <style>
       html,
       body {
@@ -21,7 +21,43 @@
     </style>
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <canvas id="game" aria-label="Quest of the Cat game"></canvas>
+    <main id="front-menu" aria-label="Main menu">
+      <section id="menu-home">
+        <p class="menu-eyebrow">NINE LIVES. FIVE SEASONS.</p>
+        <h1>QUEST OF THE CAT</h1>
+        <p class="menu-tagline">A little cat. A long way to the sea.</p>
+        <nav aria-label="Game options" style="margin: auto">
+          <button id="start-game" data-selected="true">START GAME</button>
+          <button id="show-controls">HOW TO PLAY</button>
+        </nav>
+        <p class="menu-record">TOP CAT <span id="top-scorer">PAR</span> · <span id="top-score">0</span></p>
+        <p class="menu-hint">ARROWS / D-PAD TO CHOOSE · ENTER / CROSS TO SELECT</p>
+      </section>
+      <section id="menu-controls" hidden aria-label="How to play">
+        <h2>HOW TO PLAY</h2>
+        <table>
+          <tr><th>MOVE</th><td>ARROWS / WASD</td><td>STICK / D-PAD</td></tr>
+          <tr><th>JUMP</th><td>SPACE</td><td>CROSS</td></tr>
+          <tr><th>RUN</th><td>SHIFT</td><td>R2 / CIRCLE</td></tr>
+          <tr><th>SPIN</th><td>X / K</td><td>SQUARE</td></tr>
+          <tr><th>SLIDE / SLAM</th><td>DOWN</td><td>L1 / R1 / L2</td></tr>
+          <tr><th>PAUSE</th><td>ESC</td><td>OPTIONS</td></tr>
+        </table>
+        <p>Run to slide. Press down in the air to slam.<br>Collect flowers, beat the big dog, and earn your boat.</p>
+        <button id="back-menu">BACK</button>
+      </section>
+    </main>
+    <dialog id="score-dialog" aria-labelledby="score-title">
+      <form id="score-form">
+        <p>THERE IS A NEW TOP CAT</p>
+        <h2 id="score-title">NEW HIGH SCORE!</h2>
+        <p id="new-score"></p>
+        <label for="scorer-name">Your name</label>
+        <input id="scorer-name" name="scorer" maxlength="16" required autocomplete="nickname" placeholder="Enter your name">
+        <button type="submit">SAVE SCORE</button>
+      </form>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

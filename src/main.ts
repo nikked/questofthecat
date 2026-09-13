@@ -1,3 +1,4 @@
+import "./menu.css";
 import { createState, resetLevel, step, type GameState } from "./core/state";
 import { seasonAt } from "./core/level";
 import { createAudio } from "./audio";
@@ -11,6 +12,7 @@ import {
   buildScenery,
   createRenderer,
   drawPause,
+  drawMainMenu,
   render,
 } from "./render/draw";
 
@@ -39,9 +41,10 @@ function newGame(): GameState {
   return state;
 }
 
-const BEST_KEY = "catquest.bestScore";
-const GHOST_KEY = "catquest.ghost";
-const GROWN_KEY = "catquest.grown";
+const BEST_KEY = "questofthecat.bestScore";
+const GHOST_KEY = "questofthecat.ghost";
+const NAME_KEY = "questofthecat.bestName";
+const GROWN_KEY = "questofthecat.grown";
 
 function readStored(key: string): string | null {
   try {
@@ -84,6 +87,7 @@ function isBetter(score: number, best: number): boolean {
 }
 
 let best = loadBest();
+let bestName = readStored(NAME_KEY) || (readStored(BEST_KEY) ? "PLAYER" : "PAR");
 let grown = Number(readStored(GROWN_KEY)) || 0;
 /** The bar this run has to clear; frozen at the start so the banner is honest. */
 let target = best;
@@ -93,6 +97,68 @@ let pauseIndex = 0;
 /** One write per run, however many frames the ending sits on screen. */
 let recorded = false;
 let state = newGame();
+let inMenu = true;
+let menuIndex = 0;
+const frontMenu = document.querySelector<HTMLElement>("#front-menu")!;
+const menuHome = document.querySelector<HTMLElement>("#menu-home")!;
+const menuControls = document.querySelector<HTMLElement>("#menu-controls")!;
+const menuButtons = [
+  document.querySelector<HTMLButtonElement>("#start-game")!,
+  document.querySelector<HTMLButtonElement>("#show-controls")!,
+];
+const backButton = document.querySelector<HTMLButtonElement>("#back-menu")!;
+const scoreDialog = document.querySelector<HTMLDialogElement>("#score-dialog")!;
+const scoreForm = document.querySelector<HTMLFormElement>("#score-form")!;
+const scorerName = document.querySelector<HTMLInputElement>("#scorer-name")!;
+
+function showMenu(): void {
+  inMenu = true;
+  paused = false;
+  frontMenu.hidden = false;
+  menuHome.hidden = false;
+  menuControls.hidden = true;
+  menuIndex = 0;
+  menuButtons.forEach((button, i) => button.dataset.selected = String(i === menuIndex));
+  document.querySelector("#top-scorer")!.textContent = bestName;
+  document.querySelector("#top-score")!.textContent = best.toLocaleString();
+  menuButtons[0]!.focus();
+}
+
+menuButtons[0]!.addEventListener("click", () => {
+  if (!inMenu) return;
+  state = newGame();
+  state.player.jumpHeld = controls.input.jump;
+  accumulator = 0;
+  inMenu = false;
+  frontMenu.hidden = true;
+  menuButtons[0]!.blur();
+});
+menuButtons[1]!.addEventListener("click", () => {
+  menuHome.hidden = true;
+  menuControls.hidden = false;
+  backButton.focus();
+});
+menuButtons.forEach((button, index) => button.addEventListener("focus", () => {
+  menuIndex = index;
+  menuButtons.forEach((item, i) => item.dataset.selected = String(i === index));
+}));
+backButton.addEventListener("click", showMenu);
+scoreDialog.addEventListener("cancel", (event) => event.preventDefault());
+scorerName.addEventListener("input", () => scorerName.setCustomValidity(""));
+scoreForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = scorerName.value.trim();
+  if (!name) {
+    scorerName.setCustomValidity("Please enter your name.");
+    scorerName.reportValidity();
+    return;
+  }
+  bestName = name;
+  writeStored(NAME_KEY, bestName);
+  scoreDialog.close();
+  state.player.jumpHeld = true;
+});
+showMenu();
 
 function fitCanvas(): void {
   const scale = Math.max(
@@ -123,7 +189,28 @@ function frame(now: number): void {
   const menuMove = controls.takeMenu();
   const menuConfirm = controls.takeConfirm();
 
-  if (controls.takePause()) {
+  const pausePressed = controls.takePause();
+  const restartPressed = controls.takeRestart();
+  if (scoreDialog.open) {
+    accumulator = 0;
+    return;
+  }
+  if (inMenu) {
+    accumulator = 0;
+    if (menuControls.hidden) {
+      if (menuMove !== 0) {
+        menuIndex = (menuIndex + menuMove + menuButtons.length) % menuButtons.length;
+        menuButtons[menuIndex]!.focus();
+      }
+      if (menuConfirm) menuButtons[menuIndex]!.click();
+    } else if (menuConfirm || pausePressed) {
+      showMenu();
+    }
+    if (inMenu) drawMainMenu(renderer, seconds);
+    return;
+  }
+
+  if (pausePressed) {
     paused = !paused;
     pauseIndex = 0;
   }
@@ -133,6 +220,12 @@ function frame(now: number): void {
       pauseIndex = (pauseIndex + menuMove + PAUSE_MENU.length) % PAUSE_MENU.length;
     }
     if (menuConfirm) {
+      if (PAUSE_MENU[pauseIndex] === "MAIN MENU") {
+        showMenu();
+        accumulator = 0;
+        drawMainMenu(renderer, seconds);
+        return;
+      }
       if (PAUSE_MENU[pauseIndex] === "RESTART") {
         state = newGame();
         accumulator = 0;
@@ -144,7 +237,7 @@ function frame(now: number): void {
     }
   }
 
-  if (controls.takeRestart()) {
+  if (restartPressed) {
     state = newGame();
     accumulator = 0;
     paused = false;
@@ -179,6 +272,12 @@ function frame(now: number): void {
       best = state.score;
       writeStored(BEST_KEY, String(best));
       writeStored(GHOST_KEY, JSON.stringify(state.trace));
+      bestName = "PLAYER";
+      writeStored(NAME_KEY, bestName);
+      document.querySelector("#new-score")!.textContent = `${best.toLocaleString()} POINTS`;
+      scorerName.value = "";
+      scoreDialog.showModal();
+      scorerName.focus();
     }
   }
 }

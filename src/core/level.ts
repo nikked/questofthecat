@@ -13,12 +13,12 @@ export const enum Tile {
   CrateCheck = 8,
 }
 
-/** Everything a verb can act on, and the only tiles the crate counter sees. */
+/** The destructible tiles, including explosive crates. */
 export function isCrate(tile: Tile): boolean {
   return tile >= Tile.CratePlain && tile <= Tile.CrateCheck;
 }
 
-/** Nitro is the exception: it is never broken by a verb, only by a blast. */
+/** Nitro detonates on contact or in a blast; verbs cannot break it. */
 export function breakableByVerb(tile: Tile): boolean {
   return isCrate(tile) && tile !== Tile.CrateNitro;
 }

@@ -1,0 +1,56 @@
+#front-menu {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff3d4;
+  font-family: monospace;
+  text-align: center;
+  text-shadow: 0 2px #171c32;
+}
+[hidden] { display: none !important; }
+.menu-eyebrow { color: #edbb79; font-size: 12px; letter-spacing: 4px; margin: 0 0 12px; }
+#front-menu h1 { font-size: clamp(42px, 8vw, 88px); line-height: 1; letter-spacing: -4px; margin: 0; text-shadow: 0 5px #a75738, 0 10px #252237; }
+.menu-tagline { color: #c4ccda; margin: 20px 0 24px; font-size: 13px; }
+#front-menu nav { display: grid; gap: 10px; width: 220px; }
+button, input { font: inherit; }
+button {
+  cursor: pointer;
+  border: 2px solid #6f777f;
+  padding: 10px 20px;
+  background: #1c2938;
+  color: #fff3d4;
+  font-family: monospace;
+  font-weight: bold;
+  letter-spacing: 2px;
+  box-shadow: 0 4px #101a28;
+}
+button:hover, button:focus-visible, button[data-selected="true"] {
+  outline: none;
+  border-color: #ffe0a0;
+  background: #e7a651;
+  color: #242334;
+}
+.menu-record { margin: 26px 0 0; font-size: 13px; color: #fff0bd; }
+.menu-hint { font-size: 10px; color: #abbccb; letter-spacing: 1px; margin: 12px 0 0; }
+#menu-controls { background: #152332f2; border: 2px solid #647d86; padding: 24px; max-width: min(520px, 85vw); }
+#menu-controls h2 { color: #f4bc72; margin-top: 0; }
+#menu-controls table { font-size: 12px; text-align: left; border-spacing: 12px 10px; }
+#menu-controls th { color: #eecb90; }
+#menu-controls p { font-size: 12px; line-height: 1.6; }
+#score-dialog { background: #172635; color: #fff3d4; border: 2px solid #e7a651; padding: 32px; font-family: monospace; text-align: center; max-width: 80vw; }
+#score-dialog::backdrop { background: #101a28aa; }
+#score-dialog h2 { color: #f4bc72; letter-spacing: 2px; }
+#score-dialog label { display: block; margin: 20px 0 8px; }
+#score-dialog input { display: block; box-sizing: border-box; width: 100%; background: #0e1925; color: #fff3d4; border: 2px solid #647d86; padding: 12px; margin-bottom: 20px; font-size: 18px; }
+#score-dialog input:focus { outline: 2px solid #f4bc72; }
+@media (max-height: 480px) {
+  .menu-eyebrow { margin-bottom: 6px; }
+  #front-menu h1 { font-size: 48px; }
+  .menu-tagline { margin: 14px 0; }
+  .menu-record { margin-top: 18px; }
+  #menu-controls { padding: 12px; }
+  #menu-controls table { border-spacing: 8px 6px; }
+}

@@ -110,9 +110,8 @@ export const STARTING_LIVES = 9;
 /** Long enough for the death to read, short enough not to be a wait. */
 export const DEATH_BEAT = 0.35;
 
-/** A plain crate is an armful of flowers, which is what makes clearing them pay. */
-export const CRATE_FLOWERS = 3;
-export const CRATE_POINTS = 150;
+export const SAFE_AREA_MARGIN = 2 * TILE;
+export const EXPLOSION_TIME = 0.65;
 export const TNT_FUSE = 3;
 /** A crate caught in a blast goes off faster than one you armed yourself. */
 export const TNT_CHAIN_FUSE = 0.35;
@@ -135,11 +134,6 @@ export const BOSS_CHARGE_SPEED = 300;
 export const BOSS_STUN_TIME = 2.2;
 export const BOSS_HURT_TIME = 0.8;
 export const BOSS_WIND_UP = 0.9;
-
-/** Boat tiers, in percent of the level's crates broken. */
-export const RAFT_PERCENT = 40;
-export const SAILBOAT_PERCENT = 65;
-export const SHIP_PERCENT = 90;
 
 /** Each verb is a fixed-length action, so nothing can get stuck in a pose. */
 export type Action = "none" | "spin" | "slide" | "slam" | "recover";
@@ -310,18 +304,18 @@ export type GameState = {
   readonly chimney: Chimney | null;
   avalanche: Avalanche;
   boss: Boss | null;
+  /** Replaying a boss phase after death must not pay for the same hit twice. */
+  bossHitsScored: number;
   /** Mutable crate state, keyed by tile index. Static crates are absent. */
   crates: Map<number, Crate>;
-  /** Counted once at load, so the percentage has a fixed denominator. */
-  readonly crateTotal: number;
   /** Checkpoint crate positions, fixed at load. One flag per season. */
   readonly posts: readonly Post[];
-  cratesBroken: number;
+  readonly safeAreas: readonly Rect[];
   debris: Debris[];
   phase: Phase;
   lives: number;
   deaths: number;
-  /** Every flower gathered, crates included: FLOWERS_PER_LIFE of them buys a life. */
+  /** Every flower gathered: FLOWERS_PER_LIFE of them buys a life. */
   flowerCount: number;
   score: number;
   /** Wall clock for the run, started by the first input and stopped at the boat. */
@@ -408,12 +402,6 @@ function makePlayer(x: number, y: number): Player {
   };
 }
 
-function countCrates(level: Level): number {
-  let total = 0;
-  for (const tile of level.tiles) if (isCrate(tile as Tile)) total++;
-  return total;
-}
-
 function findPosts(level: Level): readonly Post[] {
   const posts: Post[] = [];
   for (let i = 0; i < level.tiles.length; i++) {
@@ -458,10 +446,15 @@ export function createState(source: LevelSource): GameState {
     chimney: findChimney(level),
     avalanche: { active: false, y: 0 },
     boss: null,
+    bossHitsScored: 0,
     crates: new Map(),
-    crateTotal: countCrates(level),
     posts: findPosts(level),
-    cratesBroken: 0,
+    safeAreas: [{ x: spawnX, y: startY }, ...findPosts(level)].map((point) => ({
+      x: point.x - SAFE_AREA_MARGIN,
+      y: point.y - TILE,
+      w: TILE + SAFE_AREA_MARGIN * 2,
+      h: TILE * 3,
+    })),
     debris: [],
     phase: "playing",
     lives: STARTING_LIVES,
@@ -529,7 +522,8 @@ function spawnEnemies(state: GameState): Dog[] {
         homeY: y,
         flyClock: (s.x % 13) * 0.21,
       };
-    });
+    })
+    .filter((d) => !state.safeAreas.some((area) => overlaps(dogRect(d), area)));
 }
 
 /** Puts the cat back without taking anything it has collected. */
@@ -537,7 +531,9 @@ export function respawn(state: GameState): void {
   state.player = makePlayer(state.spawnX, spawnY(state.spawnY));
   state.dogs = spawnEnemies(state);
   const bossSpawn = state.level.spawns.find((s) => s.kind === "boss");
-  state.boss = bossSpawn ? makeBoss(state.level, bossSpawn.x, bossSpawn.y) : null;
+  const boss = bossSpawn ? makeBoss(state.level, bossSpawn.x, bossSpawn.y) : null;
+  state.boss = boss && !state.safeAreas.some((area) => overlaps(bossRect(boss), area))
+    ? boss : null;
   state.phase = "playing";
   state.bumps.clear();
   state.debris.length = 0;
@@ -550,7 +546,6 @@ export function resetLevel(state: GameState): void {
   const original = pristine.get(state.level);
   if (original) state.level.tiles.set(original);
   state.crates.clear();
-  state.cratesBroken = 0;
 
   respawn(state);
   state.flowers = state.level.spawns
@@ -566,6 +561,7 @@ export function resetLevel(state: GameState): void {
   state.deaths = 0;
   state.flowerCount = 0;
   state.score = 0;
+  state.bossHitsScored = 0;
   state.runTime = 0;
   state.started = false;
   state.trace = [];
@@ -652,11 +648,10 @@ function clearCrate(state: GameState, index: number): void {
     x: (index % width) * TILE,
     y: Math.floor(index / width) * TILE,
     tile,
-    life: DEBRIS_TIME,
+    life: tile === Tile.CrateNitro || tile === Tile.CrateTnt ? EXPLOSION_TIME : DEBRIS_TIME,
   });
   state.level.tiles[index] = Tile.Empty;
   state.crates.delete(index);
-  state.cratesBroken += 1;
 }
 
 /** Every hundredth flower buys a life back, however it was gathered. */
@@ -694,14 +689,11 @@ function breakCrate(state: GameState, index: number, armTnt: boolean): void {
     state.spawnX = (index % state.level.width) * TILE;
     state.spawnY = Math.floor(index / state.level.width) * TILE;
     state.sounds.push("checkpoint");
-    state.score += CRATE_POINTS;
     clearCrate(state, index);
     return;
   }
 
-  state.score += CRATE_POINTS;
   state.sounds.push("crate");
-  if (tile === Tile.CratePlain) grantFlowers(state, CRATE_FLOWERS);
   clearCrate(state, index);
 }
 
@@ -737,7 +729,7 @@ function detonate(state: GameState, index: number): void {
     w: TILE * 3,
     h: TILE * 3,
   };
-  if (overlaps(playerRect(state.player), blast)) kill(state);
+  if (overlaps(playerRect(state.player), blast)) kill(state, EXPLOSION_TIME);
   for (const d of state.dogs) {
     if (d.alive && overlaps(dogRect(d), blast)) killDog(state, d);
   }
@@ -778,9 +770,9 @@ function cratesIn(state: GameState, r: Rect): number[] {
  * Nitro is solid, so the cat can never overlap it. Death has to come from
  * brushing against it instead, which is what one pixel of inflation buys.
  */
-function touchingNitro(state: GameState, r: Rect): boolean {
+function touchingNitro(state: GameState, r: Rect): number | undefined {
   const grazed: Rect = { x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 };
-  return cratesIn(state, grazed).some(
+  return cratesIn(state, grazed).find(
     (i) => (state.level.tiles[i] as Tile) === Tile.CrateNitro,
   );
 }
@@ -955,7 +947,6 @@ function bounceOff(state: GameState, index: number, slammed: boolean): void {
   p.grounded = false;
   state.sounds.push("bounce");
   if (crate.bounces >= BOUNCE_LIMIT) {
-    state.score += CRATE_POINTS;
     clearCrate(state, index);
   }
 }
@@ -1203,7 +1194,9 @@ function stepBoss(state: GameState, dt: number): void {
   if (b.mode === "charge") {
     const moved = sweepX(state.level, bossRect(b), b.vx * dt);
     b.x = moved.value;
-    if (moved.hit || b.modeTime <= 0) {
+    const enteredSafeArea = state.safeAreas.some((area) => overlaps(bossRect(b), area));
+    if (enteredSafeArea) b.x = b.px;
+    if (moved.hit || enteredSafeArea || b.modeTime <= 0) {
       b.mode = "stunned";
       b.modeTime = BOSS_STUN_TIME;
       b.vx = 0;
@@ -1229,7 +1222,10 @@ function hitBoss(state: GameState, b: Boss): void {
   b.mode = b.phase >= BOSS_PHASES ? "dead" : "hurt";
   b.modeTime = BOSS_HURT_TIME;
   b.vx = 0;
-  state.score += BOSS_POINTS;
+  if (b.phase > state.bossHitsScored) {
+    state.score += BOSS_POINTS;
+    state.bossHitsScored = b.phase;
+  }
   state.sounds.push("bossHurt");
 }
 
@@ -1257,8 +1253,9 @@ function resolveContacts(state: GameState): void {
     }
   }
 
-  if (touchingNitro(state, rect)) {
-    kill(state);
+  const nitro = touchingNitro(state, rect);
+  if (nitro !== undefined) {
+    detonate(state, nitro);
     return;
   }
 
@@ -1316,11 +1313,11 @@ function resolveContacts(state: GameState): void {
   }
 }
 
-function kill(state: GameState): void {
+function kill(state: GameState, deathBeat = DEATH_BEAT): void {
   if (state.phase === "dying") return;
   state.sounds.push(state.lives > 1 ? "hurt" : "death");
   state.phase = "dying";
-  state.player.dying = DEATH_BEAT;
+  state.player.dying = deathBeat;
   state.player.vy = -520;
   state.player.vx = 0;
   state.player.action = "none";
@@ -1380,7 +1377,14 @@ export function step(state: GameState, input: Input, dt: number): void {
   state.player.py = state.player.y;
 
   stepPlayer(state, input, dt);
-  for (const d of state.dogs) stepDog(state.level, d, dt);
+  for (const d of state.dogs) {
+    stepDog(state.level, d, dt);
+    if (d.alive && state.safeAreas.some((area) => overlaps(dogRect(d), area))) {
+      d.x = d.px;
+      d.y = d.py;
+      d.vx = -d.vx;
+    }
+  }
   stepBoss(state, dt);
   stepCrates(state, dt);
   stepAvalanche(state, dt);
@@ -1431,18 +1435,12 @@ export function harvest(state: GameState): number {
   return flowers + leaves * MONSTERA_VALUE;
 }
 
-export function cratePercent(state: GameState): number {
-  if (state.crateTotal === 0) return 100;
-  return Math.floor((state.cratesBroken / state.crateTotal) * 100);
-}
-
 export type Ending = "shore" | "raft" | "sailboat" | "ship";
 
-/** Crates decide the boat, which is what makes clearing them the point. */
-export function endingFor(percent: number): Ending {
-  if (percent >= SHIP_PERCENT) return "ship";
-  if (percent >= SAILBOAT_PERCENT) return "sailboat";
-  if (percent >= RAFT_PERCENT) return "raft";
+export function endingFor(score: number): Ending {
+  if (score >= 36_000) return "ship";
+  if (score >= 26_000) return "sailboat";
+  if (score >= 16_000) return "raft";
   return "shore";
 }
 

@@ -1,6 +1,6 @@
 /** A par run, recorded from a scripted playthrough. Flat [x, y, ...] at TRACE_HZ. */
 export const PAR_TIME = 34.20;
-export const PAR_SCORE = 20690;
+export const PAR_SCORE = 19790;
 
 export const PAR_GHOST: readonly number[] = [
   64, 480, 66, 485, 69, 495, 73, 510, 79, 510, 86, 510, 96, 510, 107, 510, 118, 510, 129,

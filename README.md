@@ -30,6 +30,12 @@ Press Options (or Esc) for the full controls, restart, or return to the main men
 The game fits the browser window at 16:9 and resizes automatically, with dark
 purple bars filling any remaining space.
 
+On touch devices in portrait orientation, the screen uses the full width above
+a handheld controller. The D-pad moves the cat; down in midair slams. A jumps
+(and confirms menus), B slides, C spins, and D toggles RUN. START and SELECT both
+open the pause menu.
+The controls hide in landscape; use a gamepad or keyboard there.
+
 Reaching the sea prompts for your name and sends the run to a shared
 leaderboard, which the main menu shows under Leaderboard. Your own best and the
 ghost you race stay in this browser.
@@ -37,11 +43,11 @@ ghost you race stay in this browser.
 | | PS5 | Keyboard |
 |---|---|---|
 | Move | Left stick / D-pad | Arrows / WASD |
-| Run | R2 / Circle | Shift |
+| Run | R2 | Shift |
 | Jump | Cross — hold longer to jump higher | Space |
 | Spin | Square — a tail whip that reaches past the cat | X or K |
-| Slide | L1, R1 or L2, while running | Down, while running |
-| Body slam | L1, R1 or L2, in mid-air | Down, in mid-air |
+| Slide | Circle, while running | Down, while running |
+| Body slam | Stick / D-pad down, in mid-air | Down, in mid-air |
 | Pause | Options — resume or restart | Esc |
 | Restart | | R, without pausing first |
 

@@ -26,7 +26,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game");
 if (!canvas) throw new Error("missing #game canvas");
 
 const renderer = createRenderer(canvas);
-const controls = listenControls(window);
+const controls = listenControls(window, document.querySelector<HTMLElement>("#touch-controls")!);
 const audio = createAudio();
 
 function newGame(): GameState {

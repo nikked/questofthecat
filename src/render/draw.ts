@@ -1148,11 +1148,11 @@ type ControlRow = readonly [action: string, pad: string, keyboard: string];
 const CONTROL_ROWS: readonly ControlRow[] = [
   ["", "PS5 PAD", "KEYBOARD"],
   ["MOVE", "STICK OR D-PAD", "ARROWS OR WASD"],
-  ["RUN", "R2 OR CIRCLE", "SHIFT"],
+  ["RUN", "R2", "SHIFT"],
   ["JUMP", "CROSS", "SPACE"],
   ["SPIN", "SQUARE", "X OR K"],
-  ["SLIDE", "L1 R1 OR L2", "DOWN WHEN RUNNING"],
-  ["BODY SLAM", "L1 R1 OR L2", "DOWN IN THE AIR"],
+  ["SLIDE", "CIRCLE", "DOWN WHEN RUNNING"],
+  ["BODY SLAM", "DOWN IN THE AIR", "DOWN IN THE AIR"],
   ["PAUSE", "OPTIONS", "ESC"],
   ["RESTART", "", "R"],
 ];

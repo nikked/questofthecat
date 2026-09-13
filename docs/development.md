@@ -24,7 +24,8 @@ The simulation is kept free of I/O so it can be tested without a browser.
 Physics runs on a fixed 120 Hz timestep with render interpolation, so behaviour
 is identical on 60 Hz and 120 Hz displays. The world is drawn into a 640×360
 buffer and scaled to fit the browser viewport at 16:9 with pixelated rendering.
-Dark purple bars fill the remaining space. Distant scenery is drawn at half that
+Dark purple bars fill the remaining space. Portrait touch devices use a full-width
+16:9 screen above a handheld controller. Distant scenery is drawn at half that
 resolution and scaled up: it is hazed anyway, and the softer pixels read as depth.
 
 Tiles are 32px and the cat is 34 tall — deliberately taller than one tile, so

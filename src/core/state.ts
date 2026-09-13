@@ -163,9 +163,10 @@ export type Player = {
   action: Action;
   actionTime: number;
   spinCooldown: number;
-  /** Edge detection: both verbs fire on the press, never on the hold. */
+  /** Verbs fire on the press, never on the hold. */
   spinHeld: boolean;
   downHeld: boolean;
+  slideHeld: boolean;
   /** Set when a slide's sweep hit something, so the next frame can react. */
   slideBlocked: boolean;
 };
@@ -400,6 +401,7 @@ function makePlayer(x: number, y: number): Player {
     spinCooldown: 0,
     spinHeld: false,
     downHeld: false,
+    slideHeld: false,
     slideBlocked: false,
   };
 }
@@ -899,6 +901,7 @@ function startAction(
   state: GameState,
   spinPressed: boolean,
   downPressed: boolean,
+  slidePressed: boolean,
 ): void {
   const p = state.player;
   if (p.action !== "none") return;
@@ -909,11 +912,9 @@ function startAction(
     state.sounds.push("spin");
     return;
   }
-  if (!downPressed) return;
-
-  if (p.grounded && Math.abs(p.vx) >= SLIDE_MIN_SPEED) {
+  if (slidePressed && p.grounded && Math.abs(p.vx) >= SLIDE_MIN_SPEED) {
     startSlide(state, p);
-  } else if (!p.grounded) {
+  } else if (downPressed && !p.grounded) {
     p.action = "slam";
     p.actionTime = 0;
     p.vx = 0;
@@ -1006,11 +1007,13 @@ function stepPlayer(state: GameState, input: Input, dt: number): void {
   p.spinHeld = input.spin;
   const downPressed = input.down && !p.downHeld;
   p.downHeld = input.down;
+  const slidePressed = input.slide && !p.slideHeld;
+  p.slideHeld = input.slide;
 
   p.wallLock = Math.max(0, p.wallLock - dt);
   p.spinCooldown = Math.max(0, p.spinCooldown - dt);
   advanceAction(state, dt);
-  startAction(state, spinPressed, downPressed);
+  startAction(state, spinPressed, downPressed, slidePressed);
 
   const surface = SURFACES[seasonAt(level, p.x)];
   // A kick owns the cat's horizontal speed until the lock expires; otherwise

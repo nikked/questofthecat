@@ -46,9 +46,10 @@
         <table>
           <tr><th>MOVE</th><td>ARROWS / WASD</td><td>STICK / D-PAD</td></tr>
           <tr><th>JUMP</th><td>SPACE</td><td>CROSS</td></tr>
-          <tr><th>RUN</th><td>SHIFT</td><td>R2 / CIRCLE</td></tr>
+          <tr><th>RUN</th><td>SHIFT</td><td>R2</td></tr>
           <tr><th>SPIN</th><td>X / K</td><td>SQUARE</td></tr>
-          <tr><th>SLIDE / SLAM</th><td>DOWN</td><td>L1 / R1 / L2</td></tr>
+          <tr><th>SLIDE</th><td>DOWN WHILE RUNNING</td><td>CIRCLE</td></tr>
+          <tr><th>BODY SLAM</th><td>DOWN IN MIDAIR</td><td>DOWN IN MIDAIR</td></tr>
           <tr><th>PAUSE</th><td>ESC</td><td>OPTIONS</td></tr>
         </table>
         <p>Run to slide. Press down in the air to slam.<br>Collect flowers, beat the big dog, and earn your boat.</p>
@@ -61,6 +62,25 @@
         <button id="back-board" class="back">BACK</button>
       </section>
     </main>
+    <aside id="touch-controls" aria-label="Touch game controller">
+      <div class="touch-dpad" role="group" aria-label="Directional pad">
+        <button type="button" data-touch="up" aria-label="Up / jump">▲</button>
+        <button type="button" data-touch="left" aria-label="Move left">◀</button>
+        <span></span>
+        <button type="button" data-touch="right" aria-label="Move right">▶</button>
+        <button type="button" data-touch="down" aria-label="Down / body slam">▼</button>
+      </div>
+      <div class="touch-actions">
+        <button type="button" data-touch="run" aria-label="D: toggle run" aria-pressed="false">D<span>RUN</span></button>
+        <button type="button" data-touch="spin" aria-label="C: spin">C<span>SPIN</span></button>
+        <button type="button" data-touch="jump" aria-label="A: jump / confirm">A<span>JUMP</span></button>
+        <button type="button" data-touch="slide" aria-label="B: slide">B<span>SLIDE</span></button>
+      </div>
+      <div class="touch-menu">
+        <button type="button" data-touch="pause" aria-label="Select: pause menu">SELECT</button>
+        <button type="button" data-touch="pause" aria-label="Start: pause menu">START</button>
+      </div>
+    </aside>
     <dialog id="score-dialog" aria-labelledby="score-title">
       <form id="score-form">
         <p>THE CAT MADE IT TO THE SEA</p>

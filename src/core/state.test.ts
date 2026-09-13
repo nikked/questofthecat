@@ -834,6 +834,21 @@ describe("the spin", () => {
 });
 
 describe("the slide", () => {
+  it("does not turn the slide button into a body slam in midair", () => {
+    const state = start(["      ", " C    ", "      ", "      ", "######"]);
+    step(state, press({ slide: true }), DT);
+    expect(state.player.action).toBe("none");
+    step(state, press({ slide: true, down: true }), DT);
+    expect(state.player.action).toBe("slam");
+  });
+
+  it("does not turn the body-slam button into a ground slide", () => {
+    const state = start(["            ", "            ", "C           ", "############"]);
+    run(state, 0.5, press({ right: true, run: true }));
+    step(state, press({ right: true, run: true, down: true }), DT);
+    expect(state.player.action).toBe("none");
+  });
+
   const tunnel = [
     "            ",
     "      ###   ",
@@ -845,7 +860,7 @@ describe("the slide", () => {
     const state = start(["      ", "      ", "C     ", "######"]);
     run(state, 0.4);
 
-    step(state, press({ down: true }), DT);
+    step(state, press({ slide: true }), DT);
     expect(state.player.action).toBe("none");
   });
 
@@ -853,7 +868,7 @@ describe("the slide", () => {
     const state = start(["            ", "            ", "C           ", "############"]);
     run(state, 0.5, press({ right: true, run: true }));
 
-    step(state, press({ right: true, run: true, down: true }), DT);
+    step(state, press({ right: true, run: true, slide: true }), DT);
     expect(state.player.action).toBe("slide");
     expect(playerRect(state.player).h).toBe(SLIDE_H);
   });
@@ -865,14 +880,14 @@ describe("the slide", () => {
 
     const slid = start(tunnel);
     run(slid, 0.4, press({ right: true, run: true }));
-    run(slid, 2, press({ right: true, run: true, down: true }));
+    run(slid, 2, press({ right: true, run: true, slide: true }));
     expect(slid.player.x).toBeGreaterThan(9 * TILE);
   });
 
   it("launches faster than a run can", () => {
     const state = start(["            ", "            ", "C           ", "############"]);
     run(state, 0.5, press({ right: true, run: true }));
-    step(state, press({ right: true, run: true, down: true }), DT);
+    step(state, press({ right: true, run: true, slide: true }), DT);
     run(state, 0.05, press({ right: true, run: true, jump: true }));
 
     expect(state.player.vx).toBeGreaterThan(RUN_SPEED);
@@ -1013,7 +1028,7 @@ describe("what answers which enemy", () => {
     const slid = start(rows);
     still(slid);
     run(slid, 0.4, press({ right: true, run: true }));
-    run(slid, 0.5, press({ right: true, run: true, down: true }));
+    run(slid, 0.5, press({ right: true, run: true, slide: true }));
     expect(slid.deaths).toBe(0);
     expect(slid.player.x).toBeGreaterThan(7 * TILE);
   });
@@ -1117,7 +1132,7 @@ describe("a slide that runs into something", () => {
   it("breaks a crate it hits head on", () => {
     const state = start(["            ", "            ", "C     c     ", "############"]);
     run(state, 0.4, press({ right: true, run: true }));
-    run(state, 0.6, press({ right: true, run: true, down: true }));
+    run(state, 0.6, press({ right: true, run: true, slide: true }));
 
     expect(tileAt(state.level, 6, 2)).toBe(Tile.Empty);
   });
@@ -1130,7 +1145,7 @@ describe("a slide that runs into something", () => {
       "############",
     ]);
     run(state, 0.4, press({ right: true, run: true }));
-    run(state, 1.2, press({ right: true, run: true, down: true }));
+    run(state, 1.2, press({ right: true, run: true, slide: true }));
 
     // Wedged: under the roof, nose against the wall, unable to stand up.
     const jammed = state.player.x;

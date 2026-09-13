@@ -15,29 +15,36 @@ export type Meow = {
   readonly gain: number;
 };
 
-const CHIRPY: readonly Meow[] = [
-  { pitch: 620, rise: 0.08, fall: 0.22, vibrato: 6, growl: 0.1, gain: 0.5 },
-  { pitch: 700, rise: 0.06, fall: 0.18, vibrato: 8, growl: 0.05, gain: 0.45 },
-  { pitch: 560, rise: 0.1, fall: 0.26, vibrato: 5, growl: 0.15, gain: 0.5 },
-  { pitch: 780, rise: 0.05, fall: 0.16, vibrato: 9, growl: 0.08, gain: 0.4 },
-];
+type MeowBounds = { readonly [K in keyof Meow]: readonly [number, number] };
 
-const STARTLED: readonly Meow[] = [
-  { pitch: 880, rise: 0.03, fall: 0.14, vibrato: 12, growl: 0.3, gain: 0.55 },
-  { pitch: 960, rise: 0.02, fall: 0.11, vibrato: 14, growl: 0.35, gain: 0.5 },
-  { pitch: 820, rise: 0.04, fall: 0.16, vibrato: 10, growl: 0.25, gain: 0.55 },
-];
+const CHIRPY: MeowBounds = {
+  pitch: [560, 780], rise: [0.05, 0.1], fall: [0.16, 0.26],
+  vibrato: [5, 9], growl: [0.05, 0.15], gain: [0.4, 0.5],
+};
 
-const WAIL: readonly Meow[] = [
-  { pitch: 380, rise: 0.15, fall: 0.75, vibrato: 3, growl: 0.4, gain: 0.6 },
-  { pitch: 340, rise: 0.18, fall: 0.9, vibrato: 2.5, growl: 0.5, gain: 0.6 },
-];
+const STARTLED: MeowBounds = {
+  pitch: [820, 960], rise: [0.02, 0.04], fall: [0.11, 0.16],
+  vibrato: [10, 14], growl: [0.25, 0.35], gain: [0.5, 0.55],
+};
 
-const MEOWS: Readonly<Record<string, readonly Meow[]>> = {
+const WAIL: MeowBounds = {
+  pitch: [340, 380], rise: [0.15, 0.18], fall: [0.75, 0.9],
+  vibrato: [2.5, 3], growl: [0.4, 0.5], gain: [0.6, 0.6],
+};
+
+export const MEOWS: Readonly<Partial<Record<Sound, MeowBounds>>> = {
   stomp: CHIRPY,
   hurt: STARTLED,
   death: WAIL,
 };
+
+export function randomMeow(bounds: MeowBounds, random = Math.random): Meow {
+  const sample = ([min, max]: readonly [number, number]): number => min + (max - min) * random();
+  return {
+    pitch: sample(bounds.pitch), rise: sample(bounds.rise), fall: sample(bounds.fall),
+    vibrato: sample(bounds.vibrato), growl: sample(bounds.growl), gain: sample(bounds.gain),
+  };
+}
 
 type Note = {
   readonly freq: number;
@@ -184,17 +191,6 @@ export function createAudio(): Audio {
     source.stop(at + scrape.length + 0.02);
   };
 
-  /** Remembers the last pick per family so the same cat never speaks twice. */
-  const previous = new Map<string, number>();
-
-  const pick = (key: string, options: readonly Meow[]): Meow => {
-    const last = previous.get(key);
-    let index = Math.floor(Math.random() * options.length);
-    if (options.length > 1 && index === last) index = (index + 1) % options.length;
-    previous.set(key, index);
-    return options[index]!;
-  };
-
   const playNote = (note: Note, at: number): void => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -306,9 +302,9 @@ export function createAudio(): Audio {
         playScrape(scrape, at);
         return;
       }
-      const meows = MEOWS[sound];
-      if (meows) {
-        playMeow(pick(sound, meows), at);
+      const bounds = MEOWS[sound];
+      if (bounds) {
+        playMeow(randomMeow(bounds), at);
         return;
       }
       for (const note of BLIPS[sound] ?? []) playNote(note, at);

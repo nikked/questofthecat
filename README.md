@@ -27,7 +27,8 @@ pnpm dev        # http://localhost:5173
 the fallback. The title screen offers Start Game, Leaderboard and How to Play.
 Choose with arrows or the D-pad and confirm with Enter or Cross. Mouse clicks work too.
 Press Options (or Esc) for the full controls, restart, or return to the main menu.
-The game fills the browser window and resizes automatically.
+The game fits the browser window at 16:9 and resizes automatically, with dark
+purple bars filling any remaining space.
 
 Reaching the sea prompts for your name and sends the run to a shared
 leaderboard, which the main menu shows under Leaderboard. Your own best and the

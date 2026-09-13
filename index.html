@@ -10,7 +10,7 @@
       body {
         margin: 0;
         height: 100%;
-        background: #17110d;
+        background: #21172e;
         display: grid;
         place-items: center;
         overflow: hidden;
@@ -18,8 +18,9 @@
       #game {
         position: fixed;
         inset: 0;
-        width: 100%;
-        height: 100%;
+        width: min(100vw, calc(100dvh * 16 / 9));
+        height: min(100dvh, calc(100vw * 9 / 16));
+        margin: auto;
         image-rendering: pixelated;
         display: block;
       }

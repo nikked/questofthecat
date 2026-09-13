@@ -25,15 +25,42 @@ GitHub Pages at https://nikked.github.io/questofthecat/ on every push to
 branch it is started from. Pages must be set to deploy from GitHub Actions in
 the repository settings.
 
+### Leaderboard
+
+Scores live in a Google Sheet behind an Apps Script web app. Without the URL
+the game still runs; the leaderboard just says it is not configured.
+
+1. Create a Google Sheet and open Extensions > Apps Script.
+2. Replace the editor's contents with `apps-script/Code.gs` and save.
+3. Deploy > New deployment > Web app, executing as you, with access for
+   Anyone. Copy the web app URL.
+4. Set it as the repository variable `VITE_SCORES_URL` (Settings > Secrets
+   and variables > Actions > Variables), then push or rerun the workflow.
+
+After changing `apps-script/Code.gs`, copy it into the editor and update the
+existing deployment through Deploy > Manage deployments > Edit > New version.
+Keep Execute as set to Me and Who has access set to Anyone. Open the `/exec`
+URL in a signed-out browser to check that it returns JSON rather than an access
+error; saving the script alone does not update the deployed version.
+
+The script creates a `scores` tab on first use. Anyone who can reach the URL
+can post a row, so the sheet is only as honest as its players; the script
+checks shapes, not fairness. For local runs, `VITE_SCORES_URL=... pnpm dev`.
+
+New high-score submission timestamps are stored as ISO 8601 UTC strings (`Z`)
+in the sheet. The leaderboard loads when the page opens and reloads after a
+successful score submission.
+
 ## Playing
 
 **Play it on a pad.** A DualSense is the intended controller; the keyboard is
-the fallback. The title screen offers Start Game and How to Play; choose with
-arrows or the D-pad and confirm with Enter or Cross. Mouse clicks work too.
+the fallback. The title screen offers Start Game, Leaderboard and How to Play.
+Choose with arrows or the D-pad and confirm with Enter or Cross. Mouse clicks work too.
 Press Options (or Esc) for the full controls, restart, or return to the main menu.
 
-Beating the high score at the goal prompts for your name. The score, name, and
-ghost are saved in this browser, and the main menu shows the top scorer.
+Reaching the sea prompts for your name and sends the run to a shared
+leaderboard, which the main menu shows under Leaderboard. Your own best and the
+ghost you race stay in this browser.
 
 | | PS5 | Keyboard |
 |---|---|---|

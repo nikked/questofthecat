@@ -1,5 +1,5 @@
 import "./menu.css";
-import { createState, resetLevel, step, type GameState } from "./core/state";
+import { createState, endingFor, resetLevel, step, type GameState } from "./core/state";
 import { seasonAt } from "./core/level";
 import { createAudio } from "./audio";
 import { listenControls } from "./input";
@@ -13,8 +13,10 @@ import {
   createRenderer,
   drawPause,
   drawMainMenu,
+  formatTime,
   render,
 } from "./render/draw";
+import { cleanName, fetchLeaderboard, submitRun, type ScoreEntry } from "./scores";
 
 /** Simulation rate. Fixed so physics is identical on 60Hz and 120Hz displays. */
 const STEP = 1 / 120;
@@ -43,7 +45,9 @@ function newGame(): GameState {
 
 const BEST_KEY = "questofthecat.bestScore";
 const GHOST_KEY = "questofthecat.ghost";
-const NAME_KEY = "questofthecat.bestName";
+const BEST_NAME_KEY = "questofthecat.bestName";
+/** The last name entered, so a returning cat only has to press Enter. */
+const NAME_KEY = "questofthecat.name";
 const GROWN_KEY = "questofthecat.grown";
 
 function readStored(key: string): string | null {
@@ -87,7 +91,7 @@ function isBetter(score: number, best: number): boolean {
 }
 
 let best = loadBest();
-let bestName = readStored(NAME_KEY) || (readStored(BEST_KEY) ? "PLAYER" : "PAR");
+let bestName = readStored(BEST_NAME_KEY) || (readStored(BEST_KEY) ? "PLAYER" : "PAR");
 let grown = Number(readStored(GROWN_KEY)) || 0;
 /** The bar this run has to clear; frozen at the start so the banner is honest. */
 let target = best;
@@ -102,14 +106,26 @@ let menuIndex = 0;
 const frontMenu = document.querySelector<HTMLElement>("#front-menu")!;
 const menuHome = document.querySelector<HTMLElement>("#menu-home")!;
 const menuControls = document.querySelector<HTMLElement>("#menu-controls")!;
+const menuBoard = document.querySelector<HTMLElement>("#menu-board")!;
+const boardStatus = document.querySelector<HTMLElement>("#board-status")!;
+const boardTable = document.querySelector<HTMLTableElement>("#board-table")!;
 const menuButtons = [
   document.querySelector<HTMLButtonElement>("#start-game")!,
+  document.querySelector<HTMLButtonElement>("#show-board")!,
   document.querySelector<HTMLButtonElement>("#show-controls")!,
 ];
-const backButton = document.querySelector<HTMLButtonElement>("#back-menu")!;
+const backButtons = document.querySelectorAll<HTMLButtonElement>("#front-menu .back");
+const scoreTitle = document.querySelector<HTMLElement>("#score-title")!;
 const scoreDialog = document.querySelector<HTMLDialogElement>("#score-dialog")!;
 const scoreForm = document.querySelector<HTMLFormElement>("#score-form")!;
 const scorerName = document.querySelector<HTMLInputElement>("#scorer-name")!;
+const skipButton = document.querySelector<HTMLButtonElement>("#skip-score")!;
+
+/** Absent in dev and tests, so the leaderboard is simply not there. */
+const SCORES_URL = import.meta.env.VITE_SCORES_URL;
+let board: readonly ScoreEntry[] | null = null;
+let boardError = false;
+let unsavedRun = false;
 
 function showMenu(): void {
   inMenu = true;
@@ -117,16 +133,72 @@ function showMenu(): void {
   frontMenu.hidden = false;
   menuHome.hidden = false;
   menuControls.hidden = true;
+  menuBoard.hidden = true;
   menuIndex = 0;
   menuButtons.forEach((button, i) => button.dataset.selected = String(i === menuIndex));
-  document.querySelector("#top-scorer")!.textContent = bestName;
-  document.querySelector("#top-score")!.textContent = best.toLocaleString();
+  // The sheet's top cat wins over the local one, which is only this browser's.
+  const top = board?.[0];
+  document.querySelector("#top-scorer")!.textContent = top ? top.name : bestName;
+  document.querySelector("#top-score")!.textContent = (top ? top.score : best).toLocaleString();
   menuButtons[0]!.focus();
+}
+
+function openPanel(panel: HTMLElement): void {
+  menuHome.hidden = true;
+  panel.hidden = false;
+  panel.querySelector<HTMLButtonElement>(".back")!.focus();
+}
+
+function boardMessage(): string {
+  if (!SCORES_URL) return "NO LEADERBOARD CONFIGURED";
+  if (boardError) return "COULD NOT REACH THE LEADERBOARD";
+  if (unsavedRun) return "YOUR LAST RUN WAS NOT SAVED";
+  if (board === null) return "LOADING";
+  if (board.length === 0) return "NO RUNS YET. BE THE FIRST CAT.";
+  return "";
+}
+
+function renderBoard(): void {
+  boardStatus.textContent = boardMessage();
+  boardTable.replaceChildren(
+    ...(board ?? []).map((entry, i) => {
+      const row = document.createElement("tr");
+      for (const [text, cls] of [
+        [String(i + 1), "rank"],
+        [entry.name, "name"],
+        [entry.score.toLocaleString(), "score"],
+        [formatTime(entry.time), "time"],
+      ] as const) {
+        const cell = row.insertCell();
+        cell.textContent = text;
+        cell.className = cls;
+      }
+      return row;
+    }),
+  );
+}
+
+function loadBoard(): void {
+  if (!SCORES_URL) return;
+  fetchLeaderboard(SCORES_URL).then(
+    (entries) => {
+      board = entries;
+      boardError = false;
+      renderBoard();
+      if (inMenu && !menuHome.hidden) showMenu();
+    },
+    () => {
+      boardError = true;
+      renderBoard();
+    },
+  );
 }
 
 menuButtons[0]!.addEventListener("click", () => {
   if (!inMenu) return;
   state = newGame();
+  // The note is about the last run; a new one makes it stale.
+  unsavedRun = false;
   state.player.jumpHeld = controls.input.jump;
   accumulator = 0;
   inMenu = false;
@@ -134,31 +206,52 @@ menuButtons[0]!.addEventListener("click", () => {
   menuButtons[0]!.blur();
 });
 menuButtons[1]!.addEventListener("click", () => {
-  menuHome.hidden = true;
-  menuControls.hidden = false;
-  backButton.focus();
+  renderBoard();
+  openPanel(menuBoard);
 });
+menuButtons[2]!.addEventListener("click", () => openPanel(menuControls));
 menuButtons.forEach((button, index) => button.addEventListener("focus", () => {
   menuIndex = index;
   menuButtons.forEach((item, i) => item.dataset.selected = String(i === index));
 }));
-backButton.addEventListener("click", showMenu);
+backButtons.forEach((button) => button.addEventListener("click", showMenu));
 scoreDialog.addEventListener("cancel", (event) => event.preventDefault());
+skipButton.addEventListener("click", () => {
+  scoreDialog.close();
+  state.player.jumpHeld = true;
+});
 scorerName.addEventListener("input", () => scorerName.setCustomValidity(""));
 scoreForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = scorerName.value.trim();
+  const name = cleanName(scorerName.value);
   if (!name) {
     scorerName.setCustomValidity("Please enter your name.");
     scorerName.reportValidity();
     return;
   }
-  bestName = name;
-  writeStored(NAME_KEY, bestName);
+  writeStored(NAME_KEY, name);
+  if (isBetter(state.score, target)) {
+    bestName = name;
+    writeStored(BEST_NAME_KEY, name);
+  }
+  if (SCORES_URL) {
+    const run = { name, score: state.score, time: state.runTime, ending: endingFor(state.score) };
+    submitRun(SCORES_URL, run).then(
+      () => {
+        unsavedRun = false;
+        loadBoard();
+      },
+      () => {
+        unsavedRun = true;
+        renderBoard();
+      },
+    );
+  }
   scoreDialog.close();
   state.player.jumpHeld = true;
 });
 showMenu();
+loadBoard();
 
 function fitCanvas(): void {
   const scale = Math.max(
@@ -193,11 +286,14 @@ function frame(now: number): void {
   const restartPressed = controls.takeRestart();
   if (scoreDialog.open) {
     accumulator = 0;
+    // Keyboard presses inside the dialog never reach the controls, so these are the pad's.
+    if (menuConfirm) scoreForm.requestSubmit();
+    else if (pausePressed) skipButton.click();
     return;
   }
   if (inMenu) {
     accumulator = 0;
-    if (menuControls.hidden) {
+    if (!menuHome.hidden) {
       if (menuMove !== 0) {
         menuIndex = (menuIndex + menuMove + menuButtons.length) % menuButtons.length;
         menuButtons[menuIndex]!.focus();
@@ -268,17 +364,21 @@ function frame(now: number): void {
     recorded = true;
     grown += state.monstera.filter((m) => m.taken).length;
     writeStored(GROWN_KEY, String(grown));
-    if (isBetter(state.score, best)) {
+    const personalBest = isBetter(state.score, best);
+    if (personalBest) {
       best = state.score;
       writeStored(BEST_KEY, String(best));
       writeStored(GHOST_KEY, JSON.stringify(state.trace));
       bestName = "PLAYER";
-      writeStored(NAME_KEY, bestName);
-      document.querySelector("#new-score")!.textContent = `${best.toLocaleString()} POINTS`;
-      scorerName.value = "";
-      scoreDialog.showModal();
-      scorerName.focus();
+      writeStored(BEST_NAME_KEY, bestName);
     }
+    scoreTitle.textContent = personalBest ? "NEW PERSONAL BEST!" : "RUN COMPLETE";
+    document.querySelector("#new-score")!.textContent =
+      `${state.score.toLocaleString()} POINTS · ${formatTime(state.runTime)}`;
+    scorerName.value = readStored(NAME_KEY) ?? "";
+    scoreDialog.showModal();
+    scorerName.focus();
+    scorerName.select();
   }
 }
 

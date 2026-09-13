@@ -29,6 +29,7 @@
         <p class="menu-tagline">A little cat. A long way to the sea.</p>
         <nav aria-label="Game options" style="margin: auto">
           <button id="start-game" data-selected="true">START GAME</button>
+          <button id="show-board">LEADERBOARD</button>
           <button id="show-controls">HOW TO PLAY</button>
         </nav>
         <p class="menu-record">TOP CAT <span id="top-scorer">PAR</span> · <span id="top-score">0</span></p>
@@ -45,17 +46,26 @@
           <tr><th>PAUSE</th><td>ESC</td><td>OPTIONS</td></tr>
         </table>
         <p>Run to slide. Press down in the air to slam.<br>Collect flowers, beat the big dog, and earn your boat.</p>
-        <button id="back-menu">BACK</button>
+        <button id="back-menu" class="back">BACK</button>
+      </section>
+      <section id="menu-board" hidden aria-label="Leaderboard">
+        <h2>TOP CATS</h2>
+        <p id="board-status"></p>
+        <table id="board-table"></table>
+        <button id="back-board" class="back">BACK</button>
       </section>
     </main>
     <dialog id="score-dialog" aria-labelledby="score-title">
       <form id="score-form">
-        <p>THERE IS A NEW TOP CAT</p>
-        <h2 id="score-title">NEW HIGH SCORE!</h2>
+        <p>THE CAT MADE IT TO THE SEA</p>
+        <h2 id="score-title">RUN COMPLETE</h2>
         <p id="new-score"></p>
         <label for="scorer-name">Your name</label>
         <input id="scorer-name" name="scorer" maxlength="16" required autocomplete="nickname" placeholder="Enter your name">
-        <button type="submit">SAVE SCORE</button>
+        <div class="actions">
+          <button type="submit">SAVE RUN</button>
+          <button type="button" id="skip-score">SKIP</button>
+        </div>
       </form>
     </dialog>
     <script type="module" src="/src/main.ts"></script>

@@ -12,7 +12,7 @@
 }
 [hidden] { display: none !important; }
 .menu-eyebrow { color: #edbb79; font-size: 12px; letter-spacing: 4px; margin: 0 0 12px; }
-#front-menu h1 { font-size: clamp(42px, 8vw, 88px); line-height: 1; letter-spacing: -4px; margin: 0; text-shadow: 0 5px #a75738, 0 10px #252237; }
+#front-menu h1 { font-size: clamp(32px, 6vw, 64px); line-height: 1; letter-spacing: -2px; margin: 0; text-shadow: 0 5px #a75738, 0 10px #252237; }
 .menu-tagline { color: #c4ccda; margin: 20px 0 24px; font-size: 13px; }
 #front-menu nav { display: grid; gap: 10px; width: 220px; }
 button, input { font: inherit; }

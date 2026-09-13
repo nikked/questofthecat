@@ -4,8 +4,8 @@ A small arcade platformer: one run through five seasonal bands — spring, summe
 autumn, a winter summit, and a spring thaw that ends at the sea, by way of a
 crate-smashing moveset and a big dog on the shore.
 
-Vanilla TypeScript on Canvas 2D. No runtime dependencies, no asset files: every
-sprite and every sound is generated in code.
+Vanilla TypeScript on Canvas 2D. No runtime dependencies: every game sprite and
+sound is generated in code. The cat-face favicon is an SVG asset.
 
 Use Node.js 24 and pnpm 11, matching CI.
 
@@ -57,6 +57,7 @@ successful score submission.
 the fallback. The title screen offers Start Game, Leaderboard and How to Play.
 Choose with arrows or the D-pad and confirm with Enter or Cross. Mouse clicks work too.
 Press Options (or Esc) for the full controls, restart, or return to the main menu.
+The game fills the browser window and resizes automatically.
 
 Reaching the sea prompts for your name and sends the run to a shared
 leaderboard, which the main menu shows under Leaderboard. Your own best and the
@@ -111,8 +112,9 @@ The simulation is kept free of I/O so it can be tested without a browser.
 
 Physics runs on a fixed 120 Hz timestep with render interpolation, so behaviour
 is identical on 60 Hz and 120 Hz displays. The world is drawn into a 640×360
-buffer and integer-scaled with nearest-neighbour. Distant scenery is drawn at
-half that and scaled up: it is hazed anyway, and the softer pixels read as depth.
+buffer and scaled to fill the browser viewport with pixelated rendering. Windows
+that are not 16:9 stretch the image to fit. Distant scenery is drawn at half that
+resolution and scaled up: it is hazed anyway, and the softer pixels read as depth.
 
 Tiles are 32px and the cat is 34 tall — deliberately taller than one tile, so
 that a one-tile gap is something only a slide fits through.

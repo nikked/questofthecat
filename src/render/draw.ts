@@ -1260,6 +1260,7 @@ export type Hud = {
 const WALK_TO_BOAT = 0.4;
 const BOARDED = 1.6;
 const CAST_OFF = 2.6;
+export const OUTRO_COMPLETE = CAST_OFF + 1.8;
 const BOAT_SPEED = 104;
 /** Row 8 of every hull sprite is its deck, whatever the sprite's height. */
 const HULL_DECK_ROW = 16;
@@ -1517,7 +1518,7 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
 
   if (state.phase === "won") {
     // Let the boat get clear before the banner covers the screen.
-    if (outro && outro.t > CAST_OFF + 1.8) {
+    if (outro && outro.t > OUTRO_COMPLETE) {
       const title = hud.beat && outro.ending !== "shore" ? "NEW BEST!" : ENDING_TITLE[outro.ending];
       const bonus = timeBonus(state.runTime);
       drawBanner(

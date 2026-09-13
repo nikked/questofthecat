@@ -7,6 +7,7 @@ import { LEVEL_1 } from "./levels";
 import { PAR_GHOST, PAR_SCORE } from "./ghost";
 import {
   PAUSE_MENU,
+  OUTRO_COMPLETE,
   buildScenery,
   createRenderer,
   drawPause,
@@ -38,6 +39,7 @@ function newGame(): GameState {
   renderer.ghost = loadGhost();
   target = best;
   recorded = false;
+  scorePrompted = false;
   return state;
 }
 
@@ -98,6 +100,7 @@ let paused = false;
 let pauseIndex = 0;
 /** One write per run, however many frames the ending sits on screen. */
 let recorded = false;
+let scorePrompted = false;
 let state = newGame();
 let inMenu = true;
 let menuIndex = 0;
@@ -362,6 +365,9 @@ function frame(now: number): void {
     document.querySelector("#new-score")!.textContent =
       `${state.score.toLocaleString()} POINTS · ${formatTime(state.runTime)}`;
     scorerName.value = readStored(NAME_KEY) ?? "";
+  }
+  if (over && !paused && !scorePrompted && state.time - state.wonAt > OUTRO_COMPLETE) {
+    scorePrompted = true;
     scoreDialog.showModal();
     scorerName.focus();
     scorerName.select();

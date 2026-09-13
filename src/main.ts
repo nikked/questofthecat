@@ -4,7 +4,7 @@ import { seasonAt } from "./core/level";
 import { createAudio } from "./audio";
 import { listenControls } from "./input";
 import { LEVEL_1 } from "./levels";
-import { PAR_GHOST, PAR_SCORE } from "./ghost";
+import { PAR_GHOST } from "./ghost";
 import {
   PAUSE_MENU,
   OUTRO_COMPLETE,
@@ -37,7 +37,7 @@ function newGame(): GameState {
   renderer.forest = scenery.forest;
   renderer.waterfalls = scenery.waterfalls;
   renderer.ghost = loadGhost();
-  target = best;
+  target = board?.[0]?.score ?? null;
   recorded = false;
   scorePrompted = false;
   return state;
@@ -45,7 +45,6 @@ function newGame(): GameState {
 
 const BEST_KEY = "questofthecat.bestScore";
 const GHOST_KEY = "questofthecat.ghost";
-const BEST_NAME_KEY = "questofthecat.bestName";
 /** The last name entered, so a returning cat only has to press Enter. */
 const NAME_KEY = "questofthecat.name";
 const GROWN_KEY = "questofthecat.grown";
@@ -82,8 +81,7 @@ function loadGhost(): readonly number[] {
 
 /** Storage is unavailable in some privacy modes; a missing best is not an error. */
 function loadBest(): number {
-  // With no run of your own yet, par is the bar.
-  return Number(readStored(BEST_KEY)) || PAR_SCORE;
+  return Number(readStored(BEST_KEY)) || 0;
 }
 
 function isBetter(score: number, best: number): boolean {
@@ -91,10 +89,10 @@ function isBetter(score: number, best: number): boolean {
 }
 
 let best = loadBest();
-let bestName = readStored(BEST_NAME_KEY) || (readStored(BEST_KEY) ? "PLAYER" : "PAR");
+let board: readonly ScoreEntry[] | null = null;
 let grown = Number(readStored(GROWN_KEY)) || 0;
-/** The bar this run has to clear; frozen at the start so the banner is honest. */
-let target = best;
+/** Use the first shared score available for this run, then keep it fixed. */
+let target: number | null = null;
 let paused = false;
 /** Which pause entry is highlighted; always back to the top on a fresh pause. */
 let pauseIndex = 0;
@@ -124,7 +122,6 @@ const skipButton = document.querySelector<HTMLButtonElement>("#skip-score")!;
 
 /** Absent in dev and tests, so the leaderboard is simply not there. */
 const SCORES_URL = import.meta.env.VITE_SCORES_URL;
-let board: readonly ScoreEntry[] | null = null;
 let boardError = false;
 let unsavedRun = false;
 
@@ -137,10 +134,10 @@ function showMenu(): void {
   menuBoard.hidden = true;
   menuIndex = 0;
   menuButtons.forEach((button, i) => button.dataset.selected = String(i === menuIndex));
-  // The sheet's top cat wins over the local one, which is only this browser's.
   const top = board?.[0];
-  document.querySelector("#top-scorer")!.textContent = top ? top.name : bestName;
-  document.querySelector("#top-score")!.textContent = (top ? top.score : best).toLocaleString();
+  document.querySelector<HTMLElement>(".menu-record")!.hidden = !top;
+  document.querySelector("#top-scorer")!.textContent = top?.name ?? "";
+  document.querySelector("#top-score")!.textContent = top?.score.toLocaleString() ?? "";
   menuButtons[0]!.focus();
 }
 
@@ -184,6 +181,7 @@ function loadBoard(): void {
   fetchLeaderboard(SCORES_URL).then(
     (entries) => {
       board = entries;
+      if (target === null) target = entries[0]?.score ?? null;
       boardError = false;
       renderBoard();
       if (inMenu && !menuHome.hidden) showMenu();
@@ -231,10 +229,6 @@ scoreForm.addEventListener("submit", (event) => {
     return;
   }
   writeStored(NAME_KEY, name);
-  if (isBetter(state.score, target)) {
-    bestName = name;
-    writeStored(BEST_NAME_KEY, name);
-  }
   if (SCORES_URL) {
     const run = { name, score: state.score, time: state.runTime, ending: endingFor(state.score) };
     submitRun(SCORES_URL, run).then(
@@ -344,10 +338,10 @@ function frame(now: number): void {
   if (state.started && !paused) audio.music(seasonAt(state.level, state.player.x));
 
   render(renderer, state, frozen ? 1 : accumulator / STEP, {
-    best,
-    beat: isBetter(state.score, target),
+    best: target,
+    beat: target !== null && isBetter(state.score, target),
   });
-  if (paused) drawPause(renderer, best, pauseIndex);
+  if (paused) drawPause(renderer, target, pauseIndex);
 
   if (over && !recorded) {
     recorded = true;
@@ -358,8 +352,6 @@ function frame(now: number): void {
       best = state.score;
       writeStored(BEST_KEY, String(best));
       writeStored(GHOST_KEY, JSON.stringify(state.trace));
-      bestName = "PLAYER";
-      writeStored(BEST_NAME_KEY, bestName);
     }
     scoreTitle.textContent = personalBest ? "NEW PERSONAL BEST!" : "RUN COMPLETE";
     document.querySelector("#new-score")!.textContent =

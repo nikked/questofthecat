@@ -1095,14 +1095,14 @@ function drawSparkle(
   }
 }
 
-function drawHud(r: Renderer, state: GameState, best: number): void {
+function drawHud(r: Renderer, state: GameState, best: number | null): void {
   const ctx = r.ctx;
   // Two rows: the run above, what the run is earning below. One row of six
   // fields does not fit the frame at this glyph size.
   const rows = [
     [
       `SCORE ${String(state.score).padStart(5, "0")}`,
-      `BEST ${String(best).padStart(5, "0")}`,
+      `BEST ${best === null ? "-----" : String(best).padStart(5, "0")}`,
       `TIME ${formatTime(state.runTime)}`,
     ],
     [
@@ -1171,7 +1171,7 @@ const PAUSE_LINE_H = 16;
 const PAUSE_MENU_H = 20;
 const PAUSE_COL_GAP = textWidth("   ");
 
-export function drawPause(r: Renderer, best: number, selected: number): void {
+export function drawPause(r: Renderer, best: number | null, selected: number): void {
   const ctx = r.ctx;
   ctx.fillStyle = "rgba(16, 12, 9, 0.62)";
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -1180,7 +1180,7 @@ export function drawPause(r: Renderer, best: number, selected: number): void {
     Math.max(...CONTROL_ROWS.map((row) => textWidth(row[c]!))),
   );
   const tableW = cols[0]! + cols[1]! + cols[2]! + PAUSE_COL_GAP * 2;
-  const best_ = `BEST ${String(best).padStart(5, "0")}`;
+  const best_ = `BEST ${best === null ? "-----" : String(best).padStart(5, "0")}`;
   const width =
     Math.max(tableW, ...PAUSE_NOTES.map(textWidth), textWidth(best_)) + 48;
   const height =
@@ -1251,8 +1251,8 @@ const ENDING_TITLE: Readonly<Record<Ending, string>> = {
 };
 
 export type Hud = {
-  /** All-time best, shown live. */
-  readonly best: number;
+  /** The shared leaderboard score this run is trying to beat. */
+  readonly best: number | null;
   /** Whether this run has already beaten the best it started with. */
   readonly beat: boolean;
 };

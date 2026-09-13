@@ -37,7 +37,8 @@ open the pause menu.
 The controls hide in landscape; use a gamepad or keyboard there.
 
 Reaching the sea prompts for your name and sends the run to a shared
-leaderboard, which the main menu shows under Leaderboard. Your own best and the
+leaderboard, which the main menu shows under Leaderboard. Its top score is the
+score to beat in the menu and HUD. Your own best and the
 ghost you race stay in this browser.
 
 | | PS5 | Keyboard |

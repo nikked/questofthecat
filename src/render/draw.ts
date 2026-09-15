@@ -19,8 +19,6 @@ import {
   EXPLOSION_TIME,
   endingFor,
   playerHeight,
-  timeBonus,
-  LIFE_BONUS_POINTS,
   CACTUS_H,
   CACTUS_W,
   BREEDS,
@@ -1097,29 +1095,20 @@ function drawSparkle(
 
 function drawHud(r: Renderer, state: GameState, best: number | null): void {
   const ctx = r.ctx;
-  // Two rows: the run above, what the run is earning below. One row of six
-  // fields does not fit the frame at this glyph size.
-  const rows = [
-    [
-      `SCORE ${String(state.score).padStart(5, "0")}`,
-      `BEST ${best === null ? "-----" : String(best).padStart(5, "0")}`,
-      `TIME ${formatTime(state.runTime)}`,
-    ],
-    [
-      `FLOWERS ${state.flowerCount}`,
-      `LIVES ${state.lives}`,
-    ],
+  const fields = [
+    `SCORE ${String(state.score).padStart(5, "0")}`,
+    `BEST ${best === null ? "-----" : String(best).padStart(5, "0")}`,
+    `TIME ${formatTime(state.runTime)}`,
+    `LIVES ${state.lives}`,
   ];
 
   ctx.fillStyle = "rgba(20, 14, 10, 0.45)";
-  ctx.fillRect(0, 0, VIEW_W, 38);
-  rows.forEach((row, i) => {
-    let x = 10;
-    for (const line of row) {
-      drawText(ctx, r.fontLight, line, x, 4 + i * 16);
-      x += textWidth(line) + 14;
-    }
-  });
+  ctx.fillRect(0, 0, VIEW_W, 22);
+  let x = 10;
+  for (const field of fields) {
+    drawText(ctx, r.fontLight, field, x, 6);
+    x += textWidth(field) + 14;
+  }
 }
 
 function drawBanner(r: Renderer, title: string, ...lines: readonly string[]): void {
@@ -1521,14 +1510,8 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
     // Let the boat get clear before the banner covers the screen.
     if (outro && outro.t > OUTRO_COMPLETE) {
       const title = hud.beat && outro.ending !== "shore" ? "NEW BEST!" : ENDING_TITLE[outro.ending];
-      const bonus = timeBonus(state.runTime);
-      drawBanner(
-        r,
-        title,
-        `${formatTime(state.runTime)}  SPEED BONUS ${bonus}`,
-        `SCORE ${state.score}  LIVES BONUS ${state.lives * LIFE_BONUS_POINTS}`,
-        "PRESS R",
-      );
+      // The breakdown is in the name dialog, where it stays readable on a phone.
+      drawBanner(r, title, `SCORE ${state.score}`, "PRESS R");
     }
   }
 }

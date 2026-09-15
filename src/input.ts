@@ -120,22 +120,25 @@ export function listenControls(target: Window, touchRoot?: HTMLElement): Control
 
   if (touchRoot) {
     const portraitTouch = target.matchMedia("(pointer: coarse) and (orientation: portrait)");
-    const pointers = new Map<number, HTMLButtonElement>();
-    let running = false;
+    /** The button under each finger, keyed by touch identifier. */
+    const fingers = new Map<number, HTMLButtonElement>();
+    /** The handheld runs by default; this switch latches walking on instead. */
+    let walking = false;
     const actions: Readonly<Record<string, keyof Input>> = {
       left: "left", right: "right", up: "jump", down: "down", jump: "jump", spin: "spin", slide: "slide",
     };
     const updateTouch = (): void => {
       Object.assign(touch, noFlags());
-      touch.run = running;
-      for (const button of pointers.values()) {
+      // Only while the handheld is on screen, or a keyboard would never walk.
+      touch.run = portraitTouch.matches && !walking;
+      for (const button of fingers.values()) {
         const action = actions[button.dataset.touch ?? ""];
         if (action) touch[action] = true;
       }
       touchRoot.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
-        const held = [...pointers.values()].includes(button) || (button.dataset.touch === "run" && running);
+        const held = [...fingers.values()].includes(button) || (button.dataset.touch === "walk" && walking);
         button.dataset.held = String(held);
-        if (button.dataset.touch === "run") button.setAttribute("aria-pressed", String(running));
+        if (button.dataset.touch === "walk") button.setAttribute("aria-pressed", String(walking));
       });
     };
     const press = (button: HTMLButtonElement): void => {
@@ -144,39 +147,53 @@ export function listenControls(target: Window, touchRoot?: HTMLElement): Control
       if (action === "down") menu = 1;
       if (action === "jump") confirm = true;
       if (action === "pause") pause = true;
-      if (action === "run") running = !running;
+      if (action === "walk") walking = !walking;
     };
-    touchRoot.addEventListener("pointerdown", (event) => {
-      if (!portraitTouch.matches || event.button !== 0) return;
-      const button = (event.target as Element).closest<HTMLButtonElement>("button[data-touch]");
-      if (!button) return;
+    /**
+     * `touches` is every finger still on the glass, so anything missing from it
+     * has lifted even if its end event never reached us. Pairing start and end
+     * events alone can leave a direction held with no finger on it.
+     */
+    const forgetLifted = (touches: TouchList): void => {
+      const down = new Set(Array.from(touches, (t) => t.identifier));
+      for (const id of fingers.keys()) if (!down.has(id)) fingers.delete(id);
+    };
+    touchRoot.addEventListener("touchstart", (event) => {
+      if (!portraitTouch.matches) return;
+      // Keeps a long hold from turning into a text selection or callout.
       event.preventDefault();
-      button.setPointerCapture(event.pointerId);
-      pointers.set(event.pointerId, button);
-      press(button);
+      for (const t of Array.from(event.changedTouches)) {
+        const button = (t.target as Element).closest<HTMLButtonElement>("button[data-touch]");
+        if (!button) continue;
+        fingers.set(t.identifier, button);
+        press(button);
+      }
+      forgetLifted(event.touches);
+      updateTouch();
+    }, { passive: false });
+    touchRoot.addEventListener("touchmove", (event) => {
+      for (const t of Array.from(event.changedTouches)) {
+        const previous = fingers.get(t.identifier);
+        if (!previous?.closest(".touch-dpad")) continue;
+        const button = target.document.elementFromPoint(t.clientX, t.clientY)
+          ?.closest<HTMLButtonElement>(".touch-dpad button");
+        if (button && button !== previous) {
+          fingers.set(t.identifier, button);
+          press(button);
+        }
+      }
+      forgetLifted(event.touches);
       updateTouch();
     });
-    touchRoot.addEventListener("pointermove", (event) => {
-      const previous = pointers.get(event.pointerId);
-      if (!previous?.closest(".touch-dpad")) return;
-      const button = target.document.elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLButtonElement>(".touch-dpad button");
-      if (button && button !== previous) {
-        pointers.set(event.pointerId, button);
-        press(button);
-        updateTouch();
-      }
-    });
-    const release = (event: PointerEvent): void => {
-      pointers.delete(event.pointerId);
+    const release = (event: TouchEvent): void => {
+      forgetLifted(event.touches);
       updateTouch();
     };
-    touchRoot.addEventListener("pointerup", release);
-    touchRoot.addEventListener("pointercancel", release);
-    touchRoot.addEventListener("lostpointercapture", release);
+    touchRoot.addEventListener("touchend", release);
+    touchRoot.addEventListener("touchcancel", release);
     const clearTouch = (): void => {
-      pointers.clear();
-      running = false;
+      fingers.clear();
+      walking = false;
       updateTouch();
     };
     target.addEventListener("blur", clearTouch);
@@ -184,6 +201,7 @@ export function listenControls(target: Window, touchRoot?: HTMLElement): Control
       if (target.document.hidden) clearTouch();
     });
     portraitTouch.addEventListener("change", clearTouch);
+    updateTouch();
   }
 
   const firstPad = (): Gamepad | null => {

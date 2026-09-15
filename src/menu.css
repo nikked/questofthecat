@@ -48,6 +48,10 @@ button:hover, button:focus-visible, button[data-selected="true"] {
 #score-dialog { background: #172635; color: #fff3d4; border: 2px solid #e7a651; padding: 32px; font-family: monospace; text-align: center; max-width: 80vw; }
 #score-dialog::backdrop { background: #101a28aa; }
 #score-dialog h2 { color: #f4bc72; letter-spacing: 2px; }
+#score-breakdown { border-collapse: collapse; margin: 0 auto; font-size: 13px; }
+#score-breakdown td { padding: 3px 8px; text-align: right; }
+#score-breakdown td:first-child { text-align: left; color: #eecb90; }
+#score-breakdown tr:last-child td { border-top: 2px solid #647d86; padding-top: 8px; color: #fff0bd; font-size: 16px; font-weight: bold; }
 #score-dialog label { display: block; margin: 20px 0 8px; }
 #score-dialog input { display: block; box-sizing: border-box; width: 100%; background: #0e1925; color: #fff3d4; border: 2px solid #647d86; padding: 12px; margin-bottom: 20px; font-size: 18px; }
 #score-dialog input:focus { outline: 2px solid #f4bc72; }
@@ -161,8 +165,22 @@ button:hover, button:focus-visible, button[data-selected="true"] {
   .touch-actions [data-touch="spin"] { grid-area: 2 / 1; }
   .touch-actions [data-touch="slide"] { grid-area: 2 / 3; }
   .touch-actions [data-touch="jump"] { grid-area: 3 / 2; }
-  .touch-actions [data-touch="run"] { grid-area: 1 / 2; }
+  .touch-actions [data-touch="walk"] { grid-area: 1 / 2; }
   .touch-actions span { display: block; font-size: 9px; margin-top: 1px; }
+  /* A lamp on the label marks the one button that latches, lit while it is on. */
+  .touch-actions [data-touch="walk"] span::before {
+    content: "";
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin: 0 3px 1px 0;
+    border-radius: 50%;
+    background: #3a1b2f;
+  }
+  .touch-actions [data-touch="walk"][aria-pressed="true"] span::before {
+    background: #ffd36b;
+    box-shadow: 0 0 4px #ffd36b;
+  }
   .touch-menu {
     position: absolute;
     bottom: max(calc(24px + env(safe-area-inset-bottom)), 24%);

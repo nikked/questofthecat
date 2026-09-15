@@ -71,7 +71,7 @@
         <button type="button" data-touch="down" aria-label="Down / body slam">▼</button>
       </div>
       <div class="touch-actions">
-        <button type="button" data-touch="run" aria-label="D: toggle run" aria-pressed="false">D<span>RUN</span></button>
+        <button type="button" data-touch="walk" aria-label="D: walk switch" aria-pressed="false">D<span>WALK</span></button>
         <button type="button" data-touch="spin" aria-label="C: spin">C<span>SPIN</span></button>
         <button type="button" data-touch="jump" aria-label="A: jump / confirm">A<span>JUMP</span></button>
         <button type="button" data-touch="slide" aria-label="B: slide">B<span>SLIDE</span></button>
@@ -85,7 +85,7 @@
       <form id="score-form">
         <p>THE CAT MADE IT TO THE SEA</p>
         <h2 id="score-title">RUN COMPLETE</h2>
-        <p id="new-score"></p>
+        <table id="score-breakdown"></table>
         <label for="scorer-name">Your name</label>
         <input id="scorer-name" name="scorer" maxlength="16" required autocomplete="nickname" placeholder="Enter your name">
         <div class="actions">

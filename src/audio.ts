@@ -156,10 +156,18 @@ export type Audio = {
 };
 
 export function createAudio(): Audio {
+  // Declared as playback, like a video: otherwise an iPhone's silent switch mutes the game.
+  if (navigator.audioSession) navigator.audioSession.type = "playback";
   const ctx = new AudioContext();
   const master = ctx.createGain();
   master.gain.value = 0.5;
   master.connect(ctx.destination);
+
+  // iOS only starts a context from inside a tap or key handler, not from a frame callback.
+  const resume = (): void => {
+    if (ctx.state !== "running") void ctx.resume();
+  };
+  for (const type of ["touchend", "click", "keydown"]) window.addEventListener(type, resume, true);
 
   /** One buffer of white noise, reused by every scrape. */
   let noise: AudioBuffer | null = null;

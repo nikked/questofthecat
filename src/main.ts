@@ -1,5 +1,12 @@
 import "./menu.css";
-import { createState, endingFor, resetLevel, step, type GameState } from "./core/state";
+import {
+  createState,
+  endingFor,
+  resetLevel,
+  scoreBreakdown,
+  step,
+  type GameState,
+} from "./core/state";
 import { seasonAt } from "./core/level";
 import { createAudio } from "./audio";
 import { listenControls } from "./input";
@@ -115,6 +122,7 @@ const menuButtons = [
 ];
 const backButtons = document.querySelectorAll<HTMLButtonElement>("#front-menu .back");
 const scoreTitle = document.querySelector<HTMLElement>("#score-title")!;
+const breakdownTable = document.querySelector<HTMLTableElement>("#score-breakdown")!;
 const scoreDialog = document.querySelector<HTMLDialogElement>("#score-dialog")!;
 const scoreForm = document.querySelector<HTMLFormElement>("#score-form")!;
 const scorerName = document.querySelector<HTMLInputElement>("#scorer-name")!;
@@ -170,6 +178,30 @@ function renderBoard(): void {
         const cell = row.insertCell();
         cell.textContent = text;
         cell.className = cls;
+      }
+      return row;
+    }),
+  );
+}
+
+/** Every part of the score and what earned it, with the score itself last. */
+function renderBreakdown(finished: GameState): void {
+  const parts = scoreBreakdown(finished);
+  const rows: readonly (readonly [label: string, detail: string, points: number])[] = [
+    ["FLOWERS", String(finished.flowerCount), parts.flowers],
+    ["MONSTERA", String(finished.monstera.filter((m) => m.taken).length), parts.monstera],
+    ["ENEMIES", String(finished.defeated), parts.enemies],
+    ["BIG DOG", String(finished.bossHitsScored), parts.bigDog],
+    ["FLAG", "", parts.flag],
+    ["TIME BONUS", formatTime(finished.runTime), parts.time],
+    ["LIVES BONUS", String(finished.lives), parts.lives],
+    ["SCORE", "", finished.score],
+  ];
+  breakdownTable.replaceChildren(
+    ...rows.map(([label, detail, points]) => {
+      const row = document.createElement("tr");
+      for (const text of [label, detail, points.toLocaleString()]) {
+        row.insertCell().textContent = text;
       }
       return row;
     }),
@@ -354,8 +386,7 @@ function frame(now: number): void {
       writeStored(GHOST_KEY, JSON.stringify(state.trace));
     }
     scoreTitle.textContent = personalBest ? "NEW PERSONAL BEST!" : "RUN COMPLETE";
-    document.querySelector("#new-score")!.textContent =
-      `${state.score.toLocaleString()} POINTS · ${formatTime(state.runTime)}`;
+    renderBreakdown(state);
     scorerName.value = readStored(NAME_KEY) ?? "";
   }
   if (over && !paused && !scorePrompted && state.time - state.wonAt > OUTRO_COMPLETE) {

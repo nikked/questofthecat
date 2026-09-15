@@ -8,6 +8,7 @@ import {
   createState,
   endingFor,
   resetLevel,
+  scoreBreakdown,
   step,
 } from "../core/state";
 import { PAR_GHOST, PAR_SCORE, PAR_TIME } from "../ghost";
@@ -165,6 +166,13 @@ it("the level can be finished without dying", () => {
   expect(state.runTime).toBeLessThan(140);
   expect(state.boss?.mode).toBe("dead");
   expect(endingFor(state.score)).toBe("ship");
+});
+
+it("breaks a full run's score down into parts that add up to it", () => {
+  const state = play();
+
+  const parts = Object.values(scoreBreakdown(state));
+  expect(parts.reduce((sum, points) => sum + points, 0)).toBe(state.score);
 });
 
 it("the shipped par ghost still matches this level", () => {

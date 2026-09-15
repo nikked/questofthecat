@@ -32,11 +32,12 @@ purple bars filling any remaining space.
 
 On touch devices in portrait orientation, the screen uses the full width above
 a handheld controller. The D-pad moves the cat; down in midair slams. A jumps
-(and confirms menus), B slides, C spins, and D toggles RUN. START and SELECT both
+(and confirms menus), B slides, and C spins. The cat runs by default; D is a
+switch that latches walking on, and its lamp stays lit while it is. START and SELECT both
 open the pause menu.
 The controls hide in landscape; use a gamepad or keyboard there.
 
-Reaching the sea prompts for your name and sends the run to a shared
+Reaching the sea breaks down your score, asks for your name and sends the run to a shared
 leaderboard, which the main menu shows under Leaderboard. Its top score is the
 score to beat in the menu and HUD. Your own best and the
 ghost you race stay in this browser.
@@ -67,7 +68,8 @@ enemies at least two tiles away.
 Final score decides the ending: under 16,000 stays on shore, 16,000 earns a raft,
 26,000 a sailboat, and 36,000 a garlanded ship. Crates break but give no points
 or flowers, and do not affect the ending. Nitro detonates on
-contact. Score comes from stomps and what you pick up, plus a bonus that shrinks
+contact, and TNT lights a three-second fuse when the cat or its spin touches it.
+Score comes from stomps and what you pick up, plus a bonus that shrinks
 the longer you take. Every hundredth flower buys a life back, and running out
 of lives restarts the level rather than ending the run.
 
@@ -90,7 +92,9 @@ tapers from 500 to zero at 95 seconds.
 The shore is guarded. The flag does not work until the big dog is down. It
 charges at wherever you are standing, so jump the charge and let it bury itself
 in one of the arena posts — the two seconds it spends stunned are the only
-window a spin lands in. Three hits. It is harmless while it reels from one, but
-lethal again the moment it recovers, so back off between them.
+window a spin lands in. Three hits. A hit leaves it reeling for three seconds,
+harmless and immune to a second hit, then lethal again, so back off before it
+recovers. Braced against a wall, it turns and charges the other way rather than
+stunning itself on the same wall twice.
 
 [Deployment](docs/deployment.md) · [Development](docs/development.md)

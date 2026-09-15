@@ -21,7 +21,9 @@ import {
   STOMP_POINTS,
   timeBonus,
   MONSTERA_VALUE,
+  LIFE_BONUS_POINTS,
   PLAYER_H,
+  PLAYER_W,
   STARTING_LIVES,
   TRACE_HZ,
   BOUNCE_LIMIT,
@@ -32,6 +34,7 @@ import {
   endingFor,
   playerRect,
   harvest,
+  scoreBreakdown,
   resetLevel,
   step,
   type GameState,
@@ -418,6 +421,19 @@ describe("contacts", () => {
 
     expect(state.phase).toBe("won");
   });
+
+  it("wins on jumping clear over the pole instead of dropping into the sea past it", () => {
+    const state = start(["      ", "      ", "      ", "C  G  ", "####  "]);
+    const pole = state.goal!;
+    // Above the top of the pole and fast enough to carry over it.
+    state.player.x = pole.x - PLAYER_W - 2;
+    state.player.y = pole.y - PLAYER_H - 2 * TILE;
+    state.player.vx = RUN_SPEED;
+    run(state, 1, press({ right: true, run: true }));
+
+    expect(state.phase).toBe("won");
+    expect(state.deaths).toBe(0);
+  });
 });
 
 describe("seasons", () => {
@@ -561,6 +577,26 @@ describe("scoring", () => {
     const finalScore = state.score;
     run(state, 5);
     expect(state.score).toBe(finalScore);
+  });
+
+  it("breaks a finished run down into exactly the points it was paid", () => {
+    const state = start(["         ", "C        ", "         ", "d f M   G", "#########"]);
+    state.dogs[0]!.vx = 0;
+    run(state, 1);
+    run(state, 2, press({ right: true, run: true }));
+
+    expect(state.phase).toBe("won");
+    const parts = scoreBreakdown(state);
+    expect(parts).toEqual({
+      flowers: FLOWER_POINTS,
+      monstera: MONSTERA_POINTS,
+      enemies: STOMP_POINTS,
+      bigDog: 0,
+      flag: GOAL_POINTS,
+      time: timeBonus(state.runTime),
+      lives: STARTING_LIVES * LIFE_BONUS_POINTS,
+    });
+    expect(Object.values(parts).reduce((sum, points) => sum + points, 0)).toBe(state.score);
   });
 
   it("resets to zero on a new run", () => {
@@ -929,6 +965,22 @@ describe("crates", () => {
     expect(tileAt(state.level, 2, 3)).toBe(Tile.Empty);
   });
 
+  it("lights a TNT the cat only walks into", () => {
+    const state = start(["      ", "      ", "C  t  ", "######"]);
+    run(state, 1, press({ right: true }));
+
+    expect(state.crates.get(2 * state.level.width + 3)?.fuse).toBeGreaterThan(0);
+  });
+
+  it("lights a TNT the spin reaches without the cat touching it", () => {
+    const state = start(["      ", "      ", "C  t  ", "######"]);
+    run(state, 0.3);
+    state.player.x = 3 * TILE - PLAYER_W - 20;
+    run(state, 0.2, press({ spin: true }));
+
+    expect(state.crates.get(2 * state.level.width + 3)?.fuse).toBeGreaterThan(0);
+  });
+
   it("kills on any contact with nitro", () => {
     const state = start(["      ", "      ", "C n   ", "######"]);
     run(state, 0.4);
@@ -1113,6 +1165,47 @@ describe("the big dog", () => {
     run(state, 0.4);
 
     expect(state.deaths).toBe(0);
+  });
+
+  it("stays down for a few seconds after a hit, and takes no second hit meanwhile", () => {
+    const state = start(["          ", "          ", "C   B     ", "##########"]);
+    state.player.x = 3 * TILE;
+    state.boss!.mode = "stunned";
+    // Hit at the very end of the stun, which used to mean it was straight back up.
+    state.boss!.modeTime = 0.2;
+    run(state, 0.1);
+    run(state, 0.1, press({ spin: true }));
+    expect(state.boss!.phase).toBe(1);
+
+    for (let i = 0; i < 4; i++) {
+      run(state, 0.25);
+      run(state, 0.25, press({ spin: true }));
+    }
+    expect(state.boss!.mode).toBe("hurt");
+    expect(state.boss!.phase).toBe(1);
+  });
+
+  it("turns away from a wall it is already against instead of stunning on it again", () => {
+    const state = start([
+      "        ",
+      "      C ",
+      "     ###",
+      "        ",
+      "        ",
+      "      B ",
+      "########",
+    ]);
+    // Perched past its middle on the wall side, so it wants to charge the wall.
+    state.player.x = 7 * TILE + 8;
+    const stunnedAt: number[] = [];
+    for (let t = 0; t < 12; t += DT) {
+      const before = state.boss!.mode;
+      step(state, NO_INPUT, DT);
+      if (before !== "stunned" && state.boss!.mode === "stunned") stunnedAt.push(state.boss!.x);
+    }
+
+    expect(stunnedAt.length).toBeGreaterThan(1);
+    for (let i = 1; i < stunnedAt.length; i++) expect(stunnedAt[i]).not.toBe(stunnedAt[i - 1]);
   });
 
   it("keeps the flag shut until it is down", () => {

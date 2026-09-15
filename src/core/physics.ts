@@ -162,8 +162,9 @@ export type Input = {
   readonly right: boolean;
   readonly jump: boolean;
   readonly run: boolean;
-  /** Slide when it arrives on the ground at speed, body slam when in the air. */
+  /** Body slam while airborne. */
   readonly down: boolean;
+  readonly slide: boolean;
   readonly spin: boolean;
 };
 
@@ -173,6 +174,7 @@ export const NO_INPUT: Input = {
   jump: false,
   run: false,
   down: false,
+  slide: false,
   spin: false,
 };
 

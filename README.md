@@ -27,20 +27,29 @@ pnpm dev        # http://localhost:5173
 the fallback. The title screen offers Start Game, Leaderboard and How to Play.
 Choose with arrows or the D-pad and confirm with Enter or Cross. Mouse clicks work too.
 Press Options (or Esc) for the full controls, restart, or return to the main menu.
-The game fills the browser window and resizes automatically.
+The game fits the browser window at 16:9 and resizes automatically, with dark
+purple bars filling any remaining space.
 
-Reaching the sea prompts for your name and sends the run to a shared
-leaderboard, which the main menu shows under Leaderboard. Your own best and the
+On touch devices in portrait orientation, the screen uses the full width above
+a handheld controller. The D-pad moves the cat; down in midair slams. A jumps
+(and confirms menus), B slides, and C spins. The cat runs by default; D is a
+switch that latches walking on, and its lamp stays lit while it is. START and SELECT both
+open the pause menu.
+The controls hide in landscape; use a gamepad or keyboard there.
+
+Reaching the sea breaks down your score, asks for your name and sends the run to a shared
+leaderboard, which the main menu shows under Leaderboard. Its top score is the
+score to beat in the menu and HUD. Your own best and the
 ghost you race stay in this browser.
 
 | | PS5 | Keyboard |
 |---|---|---|
 | Move | Left stick / D-pad | Arrows / WASD |
-| Run | R2 / Circle | Shift |
+| Run | R2 | Shift |
 | Jump | Cross — hold longer to jump higher | Space |
 | Spin | Square — a tail whip that reaches past the cat | X or K |
-| Slide | L1, R1 or L2, while running | Down, while running |
-| Body slam | L1, R1 or L2, in mid-air | Down, in mid-air |
+| Slide | Circle, while running | Down, while running |
+| Body slam | Stick / D-pad down, in mid-air | Down, in mid-air |
 | Pause | Options — resume or restart | Esc |
 | Restart | | R, without pausing first |
 
@@ -59,14 +68,33 @@ enemies at least two tiles away.
 Final score decides the ending: under 16,000 stays on shore, 16,000 earns a raft,
 26,000 a sailboat, and 36,000 a garlanded ship. Crates break but give no points
 or flowers, and do not affect the ending. Nitro detonates on
-contact. Score comes from stomps and what you pick up, plus a bonus that shrinks
+contact, and TNT lights a three-second fuse when the cat or its spin touches it.
+Score comes from stomps and what you pick up, plus a bonus that shrinks
 the longer you take. Every hundredth flower buys a life back, and running out
 of lives restarts the level rather than ending the run.
+
+Finishing also earns **2,500 points per remaining life**.
+
+The speed bonus is interpolated between these finish times and rounded to whole
+points. Runs of 30 seconds or less earn 30,000. After 90 seconds, the bonus
+tapers from 500 to zero at 95 seconds.
+
+| Finish time | Speed bonus |
+|---|---:|
+| 90 seconds | 500 |
+| 80 seconds | 1,500 |
+| 70 seconds | 2,500 |
+| 60 seconds | 5,000 |
+| 50 seconds | 10,000 |
+| 40 seconds | 20,000 |
+| 30 seconds | 30,000 |
 
 The shore is guarded. The flag does not work until the big dog is down. It
 charges at wherever you are standing, so jump the charge and let it bury itself
 in one of the arena posts — the two seconds it spends stunned are the only
-window a spin lands in. Three hits. It is harmless while it reels from one, but
-lethal again the moment it recovers, so back off between them.
+window a spin lands in. Three hits. A hit leaves it reeling for three seconds,
+harmless and immune to a second hit, then lethal again, so back off before it
+recovers. Braced against a wall, it turns and charges the other way rather than
+stunning itself on the same wall twice.
 
 [Deployment](docs/deployment.md) · [Development](docs/development.md)

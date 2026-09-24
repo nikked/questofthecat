@@ -52,6 +52,7 @@ import {
   type Rect,
   type Side,
   type Surface,
+  type Sweep,
 } from "./physics";
 
 export const PLAYER_W = 22;
@@ -99,10 +100,12 @@ export const FLOWER_POINTS = 100;
 export const MONSTERA_POINTS = 500;
 export const STOMP_POINTS = 300;
 export const GOAL_POINTS = 1000;
+export const LIFE_BONUS_POINTS = 2500;
 export const BOSS_POINTS = 5000;
-/** Finishing inside this window pays a bonus that shrinks every second. */
-export const TIME_BONUS_WINDOW = 60;
-export const TIME_BONUS_RATE = 50;
+const TIME_BONUSES: readonly (readonly [seconds: number, points: number])[] = [
+  [30, 30000], [40, 20000], [50, 10000], [60, 5000],
+  [70, 2500], [80, 1500], [90, 500], [95, 0],
+];
 
 export const CACTUS_W = 24;
 export const CACTUS_H = 28;
@@ -132,7 +135,8 @@ export const BOSS_PHASES = 3;
 export const BOSS_CHARGE_SPEED = 300;
 /** The window the fight is actually won in. */
 export const BOSS_STUN_TIME = 2.2;
-export const BOSS_HURT_TIME = 0.8;
+/** Down for a while after a hit, so landing one is not straight back to dodging. */
+export const BOSS_HURT_TIME = 3;
 export const BOSS_WIND_UP = 0.9;
 
 /** Each verb is a fixed-length action, so nothing can get stuck in a pose. */
@@ -161,9 +165,10 @@ export type Player = {
   action: Action;
   actionTime: number;
   spinCooldown: number;
-  /** Edge detection: both verbs fire on the press, never on the hold. */
+  /** Verbs fire on the press, never on the hold. */
   spinHeld: boolean;
   downHeld: boolean;
+  slideHeld: boolean;
   /** Set when a slide's sweep hit something, so the next frame can react. */
   slideBlocked: boolean;
 };
@@ -315,6 +320,8 @@ export type GameState = {
   phase: Phase;
   lives: number;
   deaths: number;
+  /** Enemies taken out by any means, each paid STOMP_POINTS. */
+  defeated: number;
   /** Every flower gathered: FLOWERS_PER_LIFE of them buys a life. */
   flowerCount: number;
   score: number;
@@ -398,6 +405,7 @@ function makePlayer(x: number, y: number): Player {
     spinCooldown: 0,
     spinHeld: false,
     downHeld: false,
+    slideHeld: false,
     slideBlocked: false,
   };
 }
@@ -459,6 +467,7 @@ export function createState(source: LevelSource): GameState {
     phase: "playing",
     lives: STARTING_LIVES,
     deaths: 0,
+    defeated: 0,
     flowerCount: 0,
     score: 0,
     runTime: 0,
@@ -559,6 +568,7 @@ export function resetLevel(state: GameState): void {
   state.player = makePlayer(state.spawnX, spawnY(state.spawnY));
   state.lives = STARTING_LIVES;
   state.deaths = 0;
+  state.defeated = 0;
   state.flowerCount = 0;
   state.score = 0;
   state.bossHitsScored = 0;
@@ -670,12 +680,11 @@ function grantFlowers(state: GameState, count: number): void {
  * Breaks one crate. TNT is the exception that does not break on contact: it
  * lights, and the fuse is the whole point of it.
  */
-function breakCrate(state: GameState, index: number, armTnt: boolean): void {
+function breakCrate(state: GameState, index: number): void {
   const tile = state.level.tiles[index] as Tile;
   if (!isCrate(tile)) return;
 
   if (tile === Tile.CrateTnt) {
-    if (!armTnt) return;
     const crate = crateAt(state, index);
     if (crate.fuse === 0) {
       crate.fuse = TNT_FUSE;
@@ -719,7 +728,7 @@ function detonate(state: GameState, index: number): void {
       else if (tile === Tile.CrateTnt) {
         const crate = crateAt(state, at);
         if (crate.fuse === 0 || crate.fuse > TNT_CHAIN_FUSE) crate.fuse = TNT_CHAIN_FUSE;
-      } else breakCrate(state, at, false);
+      } else breakCrate(state, at);
     }
   }
 
@@ -767,14 +776,13 @@ function cratesIn(state: GameState, r: Rect): number[] {
 }
 
 /**
- * Nitro is solid, so the cat can never overlap it. Death has to come from
- * brushing against it instead, which is what one pixel of inflation buys.
+ * Crates are solid, so the cat can never overlap one. Touching nitro or TNT has
+ * to come from brushing against it instead, which is what one pixel of
+ * inflation buys.
  */
-function touchingNitro(state: GameState, r: Rect): number | undefined {
+function touchingCrates(state: GameState, r: Rect, tile: Tile): number[] {
   const grazed: Rect = { x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 };
-  return cratesIn(state, grazed).find(
-    (i) => (state.level.tiles[i] as Tile) === Tile.CrateNitro,
-  );
+  return cratesIn(state, grazed).filter((i) => (state.level.tiles[i] as Tile) === tile);
 }
 
 /* ── enemies ───────────────────────────────────────────────────────────── */
@@ -870,6 +878,7 @@ function killDog(state: GameState, d: Dog): void {
   d.alive = false;
   d.squash = 0.5;
   d.vx = 0;
+  state.defeated += 1;
   state.score += STOMP_POINTS;
 }
 
@@ -897,6 +906,7 @@ function startAction(
   state: GameState,
   spinPressed: boolean,
   downPressed: boolean,
+  slidePressed: boolean,
 ): void {
   const p = state.player;
   if (p.action !== "none") return;
@@ -907,11 +917,9 @@ function startAction(
     state.sounds.push("spin");
     return;
   }
-  if (!downPressed) return;
-
-  if (p.grounded && Math.abs(p.vx) >= SLIDE_MIN_SPEED) {
+  if (slidePressed && p.grounded && Math.abs(p.vx) >= SLIDE_MIN_SPEED) {
     startSlide(state, p);
-  } else if (!p.grounded) {
+  } else if (downPressed && !p.grounded) {
     p.action = "slam";
     p.actionTime = 0;
     p.vx = 0;
@@ -925,14 +933,14 @@ function startAction(
 function verbBreaksCrates(state: GameState): void {
   const p = state.player;
   if (p.action === "spin") {
-    for (const index of cratesIn(state, spinRect(p))) breakCrate(state, index, false);
+    for (const index of cratesIn(state, spinRect(p))) breakCrate(state, index);
   } else if (p.action === "slide") {
     // Reaching a little past the nose matters: a crate the slide has stopped
     // flush against is adjacent, not overlapping, and grinding to a halt on
     // one is the opposite of what a slide is for.
     const r = playerRect(p);
     const reach = { x: r.x - 2, y: r.y, w: r.w + 4, h: r.h };
-    for (const index of cratesIn(state, reach)) breakCrate(state, index, false);
+    for (const index of cratesIn(state, reach)) breakCrate(state, index);
   }
 }
 
@@ -1004,11 +1012,13 @@ function stepPlayer(state: GameState, input: Input, dt: number): void {
   p.spinHeld = input.spin;
   const downPressed = input.down && !p.downHeld;
   p.downHeld = input.down;
+  const slidePressed = input.slide && !p.slideHeld;
+  p.slideHeld = input.slide;
 
   p.wallLock = Math.max(0, p.wallLock - dt);
   p.spinCooldown = Math.max(0, p.spinCooldown - dt);
   advanceAction(state, dt);
-  startAction(state, spinPressed, downPressed);
+  startAction(state, spinPressed, downPressed, slidePressed);
 
   const surface = SURFACES[seasonAt(level, p.x)];
   // A kick owns the cat's horizontal speed until the lock expires; otherwise
@@ -1129,15 +1139,14 @@ function stepPlayer(state: GameState, input: Input, dt: number): void {
     if (under >= 0) {
       const tile = state.level.tiles[under] as Tile;
       if (tile === Tile.CrateBounce) bounceOff(state, under, true);
-      // A slam is the one thing that arms a TNT without you standing on it.
-      else breakCrate(state, under, true);
+      else breakCrate(state, under);
     }
   } else if (landed && !slammed) {
     const under = tileUnderFeet(state);
     if (under >= 0) {
       const tile = state.level.tiles[under] as Tile;
       if (tile === Tile.CrateBounce) bounceOff(state, under, false);
-      else if (tile === Tile.CrateTnt) breakCrate(state, under, true);
+      else if (tile === Tile.CrateTnt) breakCrate(state, under);
     }
   }
 
@@ -1158,7 +1167,7 @@ function bumpCeiling(state: GameState, newY: number): void {
     const tile = tileAt(state.level, tx, ty);
     if (tile === Tile.Empty) continue;
     state.bumps.set(ty * state.level.width + tx, 0.18);
-    if (breakableByVerb(tile)) breakCrate(state, ty * state.level.width + tx, false);
+    if (breakableByVerb(tile)) breakCrate(state, ty * state.level.width + tx);
     break;
   }
 }
@@ -1183,6 +1192,9 @@ function stepBoss(state: GameState, dt: number): void {
 
   if (b.mode === "wait") {
     b.facing = p.x + PLAYER_W / 2 < b.x + BOSS_W / 2 ? -1 : 1;
+    // Still braced against what stunned it: charging that way again would stun
+    // it on the spot, handing out a second window for the same hit.
+    if (chargeStep(state, b, b.facing * speed * dt).hit) b.facing = b.facing > 0 ? -1 : 1;
     if (b.modeTime <= 0) {
       b.mode = "charge";
       b.modeTime = 4;
@@ -1192,11 +1204,9 @@ function stepBoss(state: GameState, dt: number): void {
   }
 
   if (b.mode === "charge") {
-    const moved = sweepX(state.level, bossRect(b), b.vx * dt);
+    const moved = chargeStep(state, b, b.vx * dt);
     b.x = moved.value;
-    const enteredSafeArea = state.safeAreas.some((area) => overlaps(bossRect(b), area));
-    if (enteredSafeArea) b.x = b.px;
-    if (moved.hit || enteredSafeArea || b.modeTime <= 0) {
+    if (moved.hit || b.modeTime <= 0) {
       b.mode = "stunned";
       b.modeTime = BOSS_STUN_TIME;
       b.vx = 0;
@@ -1215,6 +1225,13 @@ function stepBoss(state: GameState, dt: number): void {
     b.mode = "wait";
     b.modeTime = Math.max(0.3, BOSS_WIND_UP - b.phase * 0.2);
   }
+}
+
+/** One step of a charge, which a wall or the edge of a spawn safe area stops. */
+function chargeStep(state: GameState, b: Boss, dx: number): Sweep {
+  const moved = sweepX(state.level, bossRect(b), dx);
+  const ahead = { ...bossRect(b), x: moved.value };
+  return state.safeAreas.some((area) => overlaps(ahead, area)) ? { value: b.x, hit: true } : moved;
 }
 
 function hitBoss(state: GameState, b: Boss): void {
@@ -1253,11 +1270,12 @@ function resolveContacts(state: GameState): void {
     }
   }
 
-  const nitro = touchingNitro(state, rect);
+  const nitro = touchingCrates(state, rect, Tile.CrateNitro)[0];
   if (nitro !== undefined) {
     detonate(state, nitro);
     return;
   }
+  for (const tnt of touchingCrates(state, rect, Tile.CrateTnt)) breakCrate(state, tnt);
 
   for (const c of state.cacti) {
     if (overlaps(rect, c)) {
@@ -1305,11 +1323,13 @@ function resolveContacts(state: GameState): void {
     return;
   }
 
-  // The boat only leaves once the shore is clear.
-  if (state.goal && overlaps(rect, state.goal) && (!boss || boss.mode === "dead")) {
+  // Past the pole at any height counts: a jump clears a one-tile pole easily,
+  // and beyond it is the sea. The boat only leaves once the shore is clear.
+  const pastPole = state.goal !== null && rect.x + rect.w > state.goal.x;
+  if (pastPole && (!boss || boss.mode === "dead")) {
     state.phase = "won";
     state.wonAt = state.time;
-    state.score += GOAL_POINTS + timeBonus(state.runTime);
+    state.score += GOAL_POINTS + timeBonus(state.runTime) + state.lives * LIFE_BONUS_POINTS;
   }
 }
 
@@ -1425,7 +1445,17 @@ function stepAvalanche(state: GameState, dt: number): void {
 
 /** Speed pays, but never negatively: a slow run simply earns no bonus. */
 export function timeBonus(runTime: number): number {
-  return Math.max(0, Math.round((TIME_BONUS_WINDOW - runTime) * TIME_BONUS_RATE));
+  const [fastest, maximum] = TIME_BONUSES[0]!;
+  if (runTime <= fastest) return maximum;
+  for (let i = 1; i < TIME_BONUSES.length; i++) {
+    const [seconds, points] = TIME_BONUSES[i]!;
+    if (runTime <= seconds) {
+      const [previousSeconds, previousPoints] = TIME_BONUSES[i - 1]!;
+      const fraction = (runTime - previousSeconds) / (seconds - previousSeconds);
+      return Math.round(previousPoints + (points - previousPoints) * fraction);
+    }
+  }
+  return 0;
 }
 
 /** What the cat is carrying, in flower-equivalents. */
@@ -1433,6 +1463,31 @@ export function harvest(state: GameState): number {
   const flowers = state.flowers.filter((f) => f.taken).length;
   const leaves = state.monstera.filter((m) => m.taken).length;
   return flowers + leaves * MONSTERA_VALUE;
+}
+
+/** Where the score came from, in points. The parts always add up to the score. */
+export type ScoreBreakdown = {
+  readonly flowers: number;
+  readonly monstera: number;
+  readonly enemies: number;
+  readonly bigDog: number;
+  readonly flag: number;
+  readonly time: number;
+  readonly lives: number;
+};
+
+export function scoreBreakdown(state: GameState): ScoreBreakdown {
+  // The finish bonuses are paid at the flag and not a moment before.
+  const won = state.phase === "won";
+  return {
+    flowers: state.flowerCount * FLOWER_POINTS,
+    monstera: state.monstera.filter((m) => m.taken).length * MONSTERA_POINTS,
+    enemies: state.defeated * STOMP_POINTS,
+    bigDog: state.bossHitsScored * BOSS_POINTS,
+    flag: won ? GOAL_POINTS : 0,
+    time: won ? timeBonus(state.runTime) : 0,
+    lives: won ? state.lives * LIFE_BONUS_POINTS : 0,
+  };
 }
 
 export type Ending = "shore" | "raft" | "sailboat" | "ship";

@@ -19,7 +19,6 @@ import {
   EXPLOSION_TIME,
   endingFor,
   playerHeight,
-  timeBonus,
   CACTUS_H,
   CACTUS_W,
   BREEDS,
@@ -1094,31 +1093,22 @@ function drawSparkle(
   }
 }
 
-function drawHud(r: Renderer, state: GameState, best: number): void {
+function drawHud(r: Renderer, state: GameState, best: number | null): void {
   const ctx = r.ctx;
-  // Two rows: the run above, what the run is earning below. One row of six
-  // fields does not fit the frame at this glyph size.
-  const rows = [
-    [
-      `SCORE ${String(state.score).padStart(5, "0")}`,
-      `BEST ${String(best).padStart(5, "0")}`,
-      `TIME ${formatTime(state.runTime)}`,
-    ],
-    [
-      `FLOWERS ${state.flowerCount}`,
-      `LIVES ${state.lives}`,
-    ],
+  const fields = [
+    `SCORE ${String(state.score).padStart(5, "0")}`,
+    `BEST ${best === null ? "-----" : String(best).padStart(5, "0")}`,
+    `TIME ${formatTime(state.runTime)}`,
+    `LIVES ${state.lives}`,
   ];
 
   ctx.fillStyle = "rgba(20, 14, 10, 0.45)";
-  ctx.fillRect(0, 0, VIEW_W, 38);
-  rows.forEach((row, i) => {
-    let x = 10;
-    for (const line of row) {
-      drawText(ctx, r.fontLight, line, x, 4 + i * 16);
-      x += textWidth(line) + 14;
-    }
-  });
+  ctx.fillRect(0, 0, VIEW_W, 22);
+  let x = 10;
+  for (const field of fields) {
+    drawText(ctx, r.fontLight, field, x, 6);
+    x += textWidth(field) + 14;
+  }
 }
 
 function drawBanner(r: Renderer, title: string, ...lines: readonly string[]): void {
@@ -1147,11 +1137,11 @@ type ControlRow = readonly [action: string, pad: string, keyboard: string];
 const CONTROL_ROWS: readonly ControlRow[] = [
   ["", "PS5 PAD", "KEYBOARD"],
   ["MOVE", "STICK OR D-PAD", "ARROWS OR WASD"],
-  ["RUN", "R2 OR CIRCLE", "SHIFT"],
+  ["RUN", "R2", "SHIFT"],
   ["JUMP", "CROSS", "SPACE"],
   ["SPIN", "SQUARE", "X OR K"],
-  ["SLIDE", "L1 R1 OR L2", "DOWN WHEN RUNNING"],
-  ["BODY SLAM", "L1 R1 OR L2", "DOWN IN THE AIR"],
+  ["SLIDE", "CIRCLE", "DOWN WHEN RUNNING"],
+  ["BODY SLAM", "DOWN IN THE AIR", "DOWN IN THE AIR"],
   ["PAUSE", "OPTIONS", "ESC"],
   ["RESTART", "", "R"],
 ];
@@ -1170,7 +1160,7 @@ const PAUSE_LINE_H = 16;
 const PAUSE_MENU_H = 20;
 const PAUSE_COL_GAP = textWidth("   ");
 
-export function drawPause(r: Renderer, best: number, selected: number): void {
+export function drawPause(r: Renderer, best: number | null, selected: number): void {
   const ctx = r.ctx;
   ctx.fillStyle = "rgba(16, 12, 9, 0.62)";
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -1179,7 +1169,7 @@ export function drawPause(r: Renderer, best: number, selected: number): void {
     Math.max(...CONTROL_ROWS.map((row) => textWidth(row[c]!))),
   );
   const tableW = cols[0]! + cols[1]! + cols[2]! + PAUSE_COL_GAP * 2;
-  const best_ = `BEST ${String(best).padStart(5, "0")}`;
+  const best_ = `BEST ${best === null ? "-----" : String(best).padStart(5, "0")}`;
   const width =
     Math.max(tableW, ...PAUSE_NOTES.map(textWidth), textWidth(best_)) + 48;
   const height =
@@ -1250,8 +1240,8 @@ const ENDING_TITLE: Readonly<Record<Ending, string>> = {
 };
 
 export type Hud = {
-  /** All-time best, shown live. */
-  readonly best: number;
+  /** The shared leaderboard score this run is trying to beat. */
+  readonly best: number | null;
   /** Whether this run has already beaten the best it started with. */
   readonly beat: boolean;
 };
@@ -1260,6 +1250,7 @@ export type Hud = {
 const WALK_TO_BOAT = 0.4;
 const BOARDED = 1.6;
 const CAST_OFF = 2.6;
+export const OUTRO_COMPLETE = CAST_OFF + 1.8;
 const BOAT_SPEED = 104;
 /** Row 8 of every hull sprite is its deck, whatever the sprite's height. */
 const HULL_DECK_ROW = 16;
@@ -1517,16 +1508,10 @@ export function render(r: Renderer, state: GameState, alpha: number, hud: Hud): 
 
   if (state.phase === "won") {
     // Let the boat get clear before the banner covers the screen.
-    if (outro && outro.t > CAST_OFF + 1.8) {
+    if (outro && outro.t > OUTRO_COMPLETE) {
       const title = hud.beat && outro.ending !== "shore" ? "NEW BEST!" : ENDING_TITLE[outro.ending];
-      const bonus = timeBonus(state.runTime);
-      drawBanner(
-        r,
-        title,
-        `${formatTime(state.runTime)}  SPEED BONUS ${bonus}`,
-        `SCORE ${state.score}`,
-        "PRESS R",
-      );
+      // The breakdown is in the name dialog, where it stays readable on a phone.
+      drawBanner(r, title, `SCORE ${state.score}`, "PRESS R");
     }
   }
 }

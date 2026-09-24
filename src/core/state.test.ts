@@ -19,11 +19,11 @@ import {
   GOAL_POINTS,
   MONSTERA_POINTS,
   STOMP_POINTS,
-  TIME_BONUS_RATE,
-  TIME_BONUS_WINDOW,
   timeBonus,
   MONSTERA_VALUE,
+  LIFE_BONUS_POINTS,
   PLAYER_H,
+  PLAYER_W,
   STARTING_LIVES,
   TRACE_HZ,
   BOUNCE_LIMIT,
@@ -34,6 +34,7 @@ import {
   endingFor,
   playerRect,
   harvest,
+  scoreBreakdown,
   resetLevel,
   step,
   type GameState,
@@ -420,6 +421,19 @@ describe("contacts", () => {
 
     expect(state.phase).toBe("won");
   });
+
+  it("wins on jumping clear over the pole instead of dropping into the sea past it", () => {
+    const state = start(["      ", "      ", "      ", "C  G  ", "####  "]);
+    const pole = state.goal!;
+    // Above the top of the pole and fast enough to carry over it.
+    state.player.x = pole.x - PLAYER_W - 2;
+    state.player.y = pole.y - PLAYER_H - 2 * TILE;
+    state.player.vx = RUN_SPEED;
+    run(state, 1, press({ right: true, run: true }));
+
+    expect(state.phase).toBe("won");
+    expect(state.deaths).toBe(0);
+  });
 });
 
 describe("seasons", () => {
@@ -534,20 +548,55 @@ describe("scoring", () => {
     expect(state.score).toBe(STOMP_POINTS);
   });
 
-  it("rewards a fast finish and never punishes a slow one", () => {
-    expect(timeBonus(0)).toBe(TIME_BONUS_WINDOW * TIME_BONUS_RATE);
-    expect(timeBonus(TIME_BONUS_WINDOW)).toBe(0);
-    // Past the window the bonus floors rather than going negative.
-    expect(timeBonus(TIME_BONUS_WINDOW * 3)).toBe(0);
-    expect(timeBonus(10)).toBeGreaterThan(timeBonus(20));
+  it.each([
+    [30, 30000], [40, 20000], [50, 10000], [60, 5000],
+    [70, 2500], [80, 1500], [90, 500],
+    [35, 25000], [45, 15000], [55, 7500], [65, 3750],
+    [75, 2000], [85, 1000], [80.554, 1445], [80.556, 1444],
+    [0, 30000], [29.99, 30000], [90.01, 499], [92.5, 250], [95, 0], [180, 0],
+  ])("awards %s-second runs %s speed bonus points", (seconds, points) => {
+    expect(timeBonus(seconds)).toBe(points);
   });
 
-  it("adds the goal award and the speed bonus on the flag", () => {
+  it("has no reward jumps at the curve boundaries", () => {
+    for (const seconds of [30, 40, 50, 60, 70, 80, 90, 95]) {
+      const before = timeBonus(seconds - 0.001);
+      const after = timeBonus(seconds + 0.001);
+      expect(before).toBeGreaterThanOrEqual(after);
+      expect(before - after).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it.each([1, 3, 9, 10])("adds finish bonuses once with %s lives remaining", (lives) => {
     const state = start(["   ", "C G", "###"]);
+    state.lives = lives;
     run(state, 1.2, press({ right: true, run: true }));
 
     expect(state.phase).toBe("won");
-    expect(state.score).toBe(GOAL_POINTS + timeBonus(state.runTime));
+    expect(state.score).toBe(GOAL_POINTS + timeBonus(state.runTime) + lives * 2500);
+    const finalScore = state.score;
+    run(state, 5);
+    expect(state.score).toBe(finalScore);
+  });
+
+  it("breaks a finished run down into exactly the points it was paid", () => {
+    const state = start(["         ", "C        ", "         ", "d f M   G", "#########"]);
+    state.dogs[0]!.vx = 0;
+    run(state, 1);
+    run(state, 2, press({ right: true, run: true }));
+
+    expect(state.phase).toBe("won");
+    const parts = scoreBreakdown(state);
+    expect(parts).toEqual({
+      flowers: FLOWER_POINTS,
+      monstera: MONSTERA_POINTS,
+      enemies: STOMP_POINTS,
+      bigDog: 0,
+      flag: GOAL_POINTS,
+      time: timeBonus(state.runTime),
+      lives: STARTING_LIVES * LIFE_BONUS_POINTS,
+    });
+    expect(Object.values(parts).reduce((sum, points) => sum + points, 0)).toBe(state.score);
   });
 
   it("resets to zero on a new run", () => {
@@ -821,6 +870,21 @@ describe("the spin", () => {
 });
 
 describe("the slide", () => {
+  it("does not turn the slide button into a body slam in midair", () => {
+    const state = start(["      ", " C    ", "      ", "      ", "######"]);
+    step(state, press({ slide: true }), DT);
+    expect(state.player.action).toBe("none");
+    step(state, press({ slide: true, down: true }), DT);
+    expect(state.player.action).toBe("slam");
+  });
+
+  it("does not turn the body-slam button into a ground slide", () => {
+    const state = start(["            ", "            ", "C           ", "############"]);
+    run(state, 0.5, press({ right: true, run: true }));
+    step(state, press({ right: true, run: true, down: true }), DT);
+    expect(state.player.action).toBe("none");
+  });
+
   const tunnel = [
     "            ",
     "      ###   ",
@@ -832,7 +896,7 @@ describe("the slide", () => {
     const state = start(["      ", "      ", "C     ", "######"]);
     run(state, 0.4);
 
-    step(state, press({ down: true }), DT);
+    step(state, press({ slide: true }), DT);
     expect(state.player.action).toBe("none");
   });
 
@@ -840,7 +904,7 @@ describe("the slide", () => {
     const state = start(["            ", "            ", "C           ", "############"]);
     run(state, 0.5, press({ right: true, run: true }));
 
-    step(state, press({ right: true, run: true, down: true }), DT);
+    step(state, press({ right: true, run: true, slide: true }), DT);
     expect(state.player.action).toBe("slide");
     expect(playerRect(state.player).h).toBe(SLIDE_H);
   });
@@ -852,14 +916,14 @@ describe("the slide", () => {
 
     const slid = start(tunnel);
     run(slid, 0.4, press({ right: true, run: true }));
-    run(slid, 2, press({ right: true, run: true, down: true }));
+    run(slid, 2, press({ right: true, run: true, slide: true }));
     expect(slid.player.x).toBeGreaterThan(9 * TILE);
   });
 
   it("launches faster than a run can", () => {
     const state = start(["            ", "            ", "C           ", "############"]);
     run(state, 0.5, press({ right: true, run: true }));
-    step(state, press({ right: true, run: true, down: true }), DT);
+    step(state, press({ right: true, run: true, slide: true }), DT);
     run(state, 0.05, press({ right: true, run: true, jump: true }));
 
     expect(state.player.vx).toBeGreaterThan(RUN_SPEED);
@@ -899,6 +963,22 @@ describe("crates", () => {
     expect(tileAt(state.level, 0, 3)).toBe(Tile.Empty);
     expect(tileAt(state.level, 1, 3)).toBe(Tile.Empty);
     expect(tileAt(state.level, 2, 3)).toBe(Tile.Empty);
+  });
+
+  it("lights a TNT the cat only walks into", () => {
+    const state = start(["      ", "      ", "C  t  ", "######"]);
+    run(state, 1, press({ right: true }));
+
+    expect(state.crates.get(2 * state.level.width + 3)?.fuse).toBeGreaterThan(0);
+  });
+
+  it("lights a TNT the spin reaches without the cat touching it", () => {
+    const state = start(["      ", "      ", "C  t  ", "######"]);
+    run(state, 0.3);
+    state.player.x = 3 * TILE - PLAYER_W - 20;
+    run(state, 0.2, press({ spin: true }));
+
+    expect(state.crates.get(2 * state.level.width + 3)?.fuse).toBeGreaterThan(0);
   });
 
   it("kills on any contact with nitro", () => {
@@ -1000,7 +1080,7 @@ describe("what answers which enemy", () => {
     const slid = start(rows);
     still(slid);
     run(slid, 0.4, press({ right: true, run: true }));
-    run(slid, 0.5, press({ right: true, run: true, down: true }));
+    run(slid, 0.5, press({ right: true, run: true, slide: true }));
     expect(slid.deaths).toBe(0);
     expect(slid.player.x).toBeGreaterThan(7 * TILE);
   });
@@ -1087,6 +1167,47 @@ describe("the big dog", () => {
     expect(state.deaths).toBe(0);
   });
 
+  it("stays down for a few seconds after a hit, and takes no second hit meanwhile", () => {
+    const state = start(["          ", "          ", "C   B     ", "##########"]);
+    state.player.x = 3 * TILE;
+    state.boss!.mode = "stunned";
+    // Hit at the very end of the stun, which used to mean it was straight back up.
+    state.boss!.modeTime = 0.2;
+    run(state, 0.1);
+    run(state, 0.1, press({ spin: true }));
+    expect(state.boss!.phase).toBe(1);
+
+    for (let i = 0; i < 4; i++) {
+      run(state, 0.25);
+      run(state, 0.25, press({ spin: true }));
+    }
+    expect(state.boss!.mode).toBe("hurt");
+    expect(state.boss!.phase).toBe(1);
+  });
+
+  it("turns away from a wall it is already against instead of stunning on it again", () => {
+    const state = start([
+      "        ",
+      "      C ",
+      "     ###",
+      "        ",
+      "        ",
+      "      B ",
+      "########",
+    ]);
+    // Perched past its middle on the wall side, so it wants to charge the wall.
+    state.player.x = 7 * TILE + 8;
+    const stunnedAt: number[] = [];
+    for (let t = 0; t < 12; t += DT) {
+      const before = state.boss!.mode;
+      step(state, NO_INPUT, DT);
+      if (before !== "stunned" && state.boss!.mode === "stunned") stunnedAt.push(state.boss!.x);
+    }
+
+    expect(stunnedAt.length).toBeGreaterThan(1);
+    for (let i = 1; i < stunnedAt.length; i++) expect(stunnedAt[i]).not.toBe(stunnedAt[i - 1]);
+  });
+
   it("keeps the flag shut until it is down", () => {
     const state = start(["        ", "        ", "C  B   G", "########"]);
     run(state, 0.3);
@@ -1104,7 +1225,7 @@ describe("a slide that runs into something", () => {
   it("breaks a crate it hits head on", () => {
     const state = start(["            ", "            ", "C     c     ", "############"]);
     run(state, 0.4, press({ right: true, run: true }));
-    run(state, 0.6, press({ right: true, run: true, down: true }));
+    run(state, 0.6, press({ right: true, run: true, slide: true }));
 
     expect(tileAt(state.level, 6, 2)).toBe(Tile.Empty);
   });
@@ -1117,7 +1238,7 @@ describe("a slide that runs into something", () => {
       "############",
     ]);
     run(state, 0.4, press({ right: true, run: true }));
-    run(state, 1.2, press({ right: true, run: true, down: true }));
+    run(state, 1.2, press({ right: true, run: true, slide: true }));
 
     // Wedged: under the roof, nose against the wall, unable to stand up.
     const jammed = state.player.x;
